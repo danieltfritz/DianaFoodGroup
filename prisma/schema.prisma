@@ -1,0 +1,293 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String   @unique
+  password  String
+  role      String   @default("staff")
+  createdAt DateTime @default(now())
+}
+
+// ─── Reference / Lookup ──────────────────────────────────────────────────────
+
+model AgeGroup {
+  id           Int           @id @default(autoincrement())
+  name         String        @db.VarChar(50)
+  startAge     Int
+  endAge       Int
+  kidCounts    KidCount[]
+  mealPrices   MealPrice[]
+  servingSizes ServingSize[]
+}
+
+model Meal {
+  id           Int           @id @default(autoincrement())
+  name         String        @db.VarChar(50)
+  kidCounts    KidCount[]
+  mealPrices   MealPrice[]
+  menuItems    MenuItem[]
+  servingSizes ServingSize[]
+}
+
+model Route {
+  id      Int      @id @default(autoincrement())
+  name    String   @db.VarChar(50)
+  driver  String?  @db.VarChar(50)
+  schools School[]
+}
+
+model County {
+  id      Int      @id @default(autoincrement())
+  name    String   @db.VarChar(50)
+  schools School[]
+}
+
+model MenuType {
+  id   Int    @id @default(autoincrement())
+  name String @db.VarChar(50)
+}
+
+model FoodType {
+  id   Int    @id @default(autoincrement())
+  name String @db.VarChar(50)
+}
+
+// ─── Schools ─────────────────────────────────────────────────────────────────
+
+model School {
+  id             Int                  @id @default(autoincrement())
+  name           String               @db.VarChar(100)
+  address        String?
+  city           String?
+  state          String?              @db.VarChar(20)
+  postalCode     String?              @db.VarChar(20)
+  contactName    String?              @db.VarChar(100)
+  phone          String?              @db.VarChar(30)
+  email          String?              @db.VarChar(100)
+  fax            String?              @db.VarChar(30)
+  routeId        Int?
+  countyId       Int?
+  deliveryMon    Boolean              @default(false)
+  deliveryTue    Boolean              @default(false)
+  deliveryWed    Boolean              @default(false)
+  deliveryThu    Boolean              @default(false)
+  deliveryFri    Boolean              @default(false)
+  deliverySat    Boolean              @default(false)
+  deliverySun    Boolean              @default(false)
+  notes          String?
+  active         Boolean              @default(true)
+  route          Route?               @relation(fields: [routeId], references: [id])
+  county         County?              @relation(fields: [countyId], references: [id])
+  schoolMenus    SchoolMenu[]
+  kidCounts      KidCount[]
+  mealPrices     MealPrice[]
+  schoolClosings SchoolClosing[]
+  billingGroups  BillingSchoolGroup[]
+}
+
+// ─── Food Catalog ─────────────────────────────────────────────────────────────
+
+model Container {
+  id           Int             @id @default(autoincrement())
+  name         String          @db.VarChar(50)
+  isVariable   Boolean         @default(false)
+  allowPartial Boolean         @default(false)
+  menuTypeId   Int?
+  units        String?         @db.VarChar(50)
+  sizes        ContainerSize[]
+  foodItems    FoodItem[]
+}
+
+model ContainerSize {
+  id           Int       @id @default(autoincrement())
+  containerId  Int
+  name         String    @db.VarChar(50)
+  abbreviation String    @db.VarChar(50)
+  size         Decimal   @db.Decimal(10, 4)
+  container    Container @relation(fields: [containerId], references: [id])
+}
+
+model FoodItem {
+  id                 Int            @id @default(autoincrement())
+  name               String         @db.VarChar(100)
+  tempType           String         @db.VarChar(10)
+  foodTypeId         Int?
+  isMilk             Boolean        @default(false)
+  hasLabel           Boolean        @default(true)
+  showOnReport       Boolean        @default(true)
+  menuTypeId         Int?
+  defaultContainerId Int?
+  containerThreshold Decimal?       @db.Decimal(10, 4)
+  pkSize             Int?
+  pkUnit             String?        @db.VarChar(50)
+  container          Container?     @relation(fields: [defaultContainerId], references: [id])
+  servingSizes       ServingSize[]
+  menuItems          MenuItem[]
+  milkOverrides      MilkOverride[]
+}
+
+model ServingSize {
+  mealId      Int
+  foodItemId  Int
+  ageGroupId  Int
+  servingSize Decimal  @db.Decimal(10, 4)
+  meal        Meal     @relation(fields: [mealId], references: [id])
+  foodItem    FoodItem @relation(fields: [foodItemId], references: [id])
+  ageGroup    AgeGroup @relation(fields: [ageGroupId], references: [id])
+
+  @@id([mealId, foodItemId, ageGroupId])
+}
+
+// ─── Menus ────────────────────────────────────────────────────────────────────
+
+model Menu {
+  id            Int          @id @default(autoincrement())
+  name          String       @db.VarChar(50)
+  cycleWeeks    Int
+  effectiveDate DateTime     @db.Date
+  isBoxMenu     Boolean      @default(false)
+  delaySnack    Boolean      @default(false)
+  menuTypeId    Int?
+  items         MenuItem[]
+  schoolMenus   SchoolMenu[]
+}
+
+model MenuItem {
+  id         Int      @id @default(autoincrement())
+  menuId     Int
+  foodItemId Int
+  mealId     Int
+  week       Int
+  dayId      Int
+  menu       Menu     @relation(fields: [menuId], references: [id])
+  foodItem   FoodItem @relation(fields: [foodItemId], references: [id])
+  meal       Meal     @relation(fields: [mealId], references: [id])
+
+  @@unique([menuId, foodItemId, mealId, week, dayId])
+}
+
+model SchoolMenu {
+  id            Int            @id @default(autoincrement())
+  schoolId      Int
+  menuId        Int
+  startDate     DateTime       @db.Date
+  endDate       DateTime?      @db.Date
+  school        School         @relation(fields: [schoolId], references: [id])
+  menu          Menu           @relation(fields: [menuId], references: [id])
+  kidCounts     KidCount[]
+  mealPrices    MealPrice[]
+  milkOverrides MilkOverride[]
+}
+
+model SchoolClosing {
+  id        Int      @id @default(autoincrement())
+  schoolId  Int
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  school    School   @relation(fields: [schoolId], references: [id])
+}
+
+// ─── Core Fact Table ──────────────────────────────────────────────────────────
+
+model KidCount {
+  id           Int        @id @default(autoincrement())
+  schoolId     Int
+  schoolMenuId Int
+  date         DateTime   @db.Date
+  mealId       Int
+  ageGroupId   Int
+  count        Int
+  updatedAt    DateTime   @updatedAt
+  school       School     @relation(fields: [schoolId], references: [id])
+  schoolMenu   SchoolMenu @relation(fields: [schoolMenuId], references: [id])
+  meal         Meal       @relation(fields: [mealId], references: [id])
+  ageGroup     AgeGroup   @relation(fields: [ageGroupId], references: [id])
+
+  @@unique([schoolId, date, mealId, ageGroupId])
+  @@index([date])
+  @@index([schoolId, date])
+}
+
+// ─── Billing ──────────────────────────────────────────────────────────────────
+
+model BillingGroup {
+  id      Int                  @id @default(autoincrement())
+  name    String               @db.VarChar(50)
+  schools BillingSchoolGroup[]
+}
+
+model BillingSchoolGroup {
+  billingGroupId Int
+  schoolId       Int
+  billingGroup   BillingGroup @relation(fields: [billingGroupId], references: [id])
+  school         School       @relation(fields: [schoolId], references: [id])
+
+  @@id([billingGroupId, schoolId])
+}
+
+model MealPrice {
+  id           Int        @id @default(autoincrement())
+  schoolMenuId Int
+  schoolId     Int
+  mealId       Int
+  ageGroupId   Int
+  price        Decimal    @db.Decimal(10, 2)
+  schoolMenu   SchoolMenu @relation(fields: [schoolMenuId], references: [id])
+  school       School     @relation(fields: [schoolId], references: [id])
+  meal         Meal       @relation(fields: [mealId], references: [id])
+  ageGroup     AgeGroup   @relation(fields: [ageGroupId], references: [id])
+
+  @@unique([schoolMenuId, schoolId, mealId, ageGroupId])
+}
+
+model QbMealCode {
+  id              Int    @id @default(autoincrement())
+  transactionType String @db.VarChar(50)
+  qbCode          String @db.VarChar(50)
+  order           Int
+  mealId          Int
+  ageGroupId      Int
+  description     String @db.VarChar(100)
+}
+
+model BillingRun {
+  id           Int                @id @default(autoincrement())
+  deliveryDate DateTime           @db.Date
+  createdAt    DateTime           @default(now())
+  details      BillingRunDetail[]
+}
+
+model BillingRunDetail {
+  id           Int        @id @default(autoincrement())
+  billingRunId Int
+  schoolId     Int
+  mealId       Int
+  ageGroupId   Int
+  isBox        Boolean    @default(false)
+  kidCount     Int
+  priceUsed    Decimal    @db.Decimal(10, 2)
+  billingRun   BillingRun @relation(fields: [billingRunId], references: [id])
+}
+
+// ─── Milk Overrides ───────────────────────────────────────────────────────────
+
+model MilkOverride {
+  id              Int        @id @default(autoincrement())
+  schoolMenuId    Int
+  foodItemId      Int
+  milkFoodItemId  Int
+  containerSizeId Int
+  containerCount  Int
+  schoolMenu      SchoolMenu @relation(fields: [schoolMenuId], references: [id])
+  foodItem        FoodItem   @relation(fields: [foodItemId], references: [id])
+}

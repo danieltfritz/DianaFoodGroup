@@ -9,7 +9,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Pencil, Trash2, Plus } from "lucide-react";
+import { Pencil, Trash2, Plus, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { SchoolForm } from "./school-form";
 import { createSchool, updateSchool, deleteSchool } from "@/lib/actions/schools";
 
@@ -125,6 +126,9 @@ export function SchoolsTable({ schools, routes, counties }: { schools: School[];
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" render={<Link href={`/schools/${s.id}`} />}>
+                      <ChevronRight className="size-4" />
+                    </Button>
                     <Button size="icon" variant="ghost" onClick={() => openEdit(s)}>
                       <Pencil className="size-4" />
                     </Button>

@@ -1,0 +1,19 @@
+BEGIN TRY
+
+BEGIN TRAN;
+
+-- AlterTable
+ALTER TABLE [dbo].[FoodItem] ADD [containerStrategy] VARCHAR(20) NOT NULL CONSTRAINT [FoodItem_containerStrategy_df] DEFAULT 'LeastContainers';
+
+COMMIT TRAN;
+
+END TRY
+BEGIN CATCH
+
+IF @@TRANCOUNT > 0
+BEGIN
+    ROLLBACK TRAN;
+END;
+THROW
+
+END CATCH

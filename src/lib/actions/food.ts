@@ -14,6 +14,7 @@ const FoodItemSchema = z.object({
   menuTypeId: z.coerce.number().nullable(),
   defaultContainerId: z.coerce.number().nullable(),
   containerThreshold: z.coerce.number().nullable(),
+  containerStrategy: z.enum(["LeastContainers", "LeastWaste", "Threshold"]).default("LeastContainers"),
   pkSize: z.coerce.number().nullable(),
   pkUnit: z.string().optional(),
 });

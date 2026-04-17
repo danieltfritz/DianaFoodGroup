@@ -119,7 +119,7 @@ export default async function DeliveryTicketPage({
                                 {line.totalAmount.toFixed(2)} {line.pkUnit ?? ""}
                               </td>
                               <td className="py-1.5 text-right font-semibold">
-                                {line.packsNeeded ?? "—"}
+                                {line.packsLabel}
                               </td>
                             </tr>
                           ))}
@@ -157,7 +157,7 @@ export default async function DeliveryTicketPage({
                                 {line.totalAmount.toFixed(2)} {line.pkUnit ?? ""}
                               </td>
                               <td className="py-1.5 text-right font-semibold">
-                                {line.packsNeeded ?? "—"}
+                                {line.packsLabel}
                               </td>
                             </tr>
                           ))}

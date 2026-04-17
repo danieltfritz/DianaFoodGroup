@@ -129,6 +129,7 @@ model FoodItem {
   menuTypeId         Int?
   defaultContainerId Int?
   containerThreshold Decimal?       @db.Decimal(10, 4)
+  containerStrategy  String         @default("LeastContainers") @db.VarChar(20)
   pkSize             Int?
   pkUnit             String?        @db.VarChar(50)
   container          Container?     @relation(fields: [defaultContainerId], references: [id])

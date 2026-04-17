@@ -1,20 +1,35 @@
 import { prisma } from "@/lib/db";
 import { getCycleWeek, getDayId, addDays, isThursday, getBatch } from "@/lib/cycle";
+import { packContainers, type PackResult, type ContainerSizeInput } from "@/lib/containers";
+
+export type { PackResult };
 
 export type ProductionItem = {
   foodId: number;
   foodName: string;
   tempType: string;
   totalAmount: number;
-  pkSize: number | null;
   pkUnit: string | null;
   batch: "LSD" | "TomB";
+  packs: PackResult[];
 };
 
 export type ProductionResult = {
   lsd: ProductionItem[];
   tomb: ProductionItem[];
   all: ProductionItem[]; // lsd + tomb merged by foodId, for consumers that don't need batch separation
+};
+
+type FoodAccumulator = {
+  foodId: number;
+  foodName: string;
+  tempType: string;
+  totalAmount: number;
+  pkUnit: string | null;
+  batch: "LSD" | "TomB";
+  containerSizes: ContainerSizeInput[];
+  containerStrategy: string;
+  containerThreshold: number | null;
 };
 
 /** On Thursday, production covers Fri + Sat + Sun delivery. All other days: just next day. */
@@ -27,6 +42,18 @@ export function getDeliveryDatesForProductionDate(productionDate: Date): Date[] 
     ];
   }
   return [addDays(productionDate, 1)];
+}
+
+function accToItem(acc: FoodAccumulator): ProductionItem {
+  return {
+    foodId: acc.foodId,
+    foodName: acc.foodName,
+    tempType: acc.tempType,
+    totalAmount: acc.totalAmount,
+    pkUnit: acc.pkUnit,
+    batch: acc.batch,
+    packs: packContainers(acc.totalAmount, acc.containerSizes, acc.containerStrategy, acc.containerThreshold),
+  };
 }
 
 export async function calculateProduction(deliveryDate: Date): Promise<ProductionResult> {
@@ -57,8 +84,8 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
 
   if (kidCounts.length === 0) return { lsd: [], tomb: [], all: [] };
 
-  const lsdTotals = new Map<number, ProductionItem>();
-  const tombTotals = new Map<number, ProductionItem>();
+  const lsdTotals = new Map<number, FoodAccumulator>();
+  const tombTotals = new Map<number, FoodAccumulator>();
 
   for (const kc of kidCounts) {
     const menu = kc.schoolMenu.menu;
@@ -69,7 +96,15 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
 
     const menuItems = await prisma.menuItem.findMany({
       where: { menuId: menu.id, mealId: kc.mealId, week: cycleWeek, dayId },
-      include: { foodItem: true },
+      include: {
+        foodItem: {
+          include: {
+            container: {
+              include: { sizes: { orderBy: { size: "desc" } } },
+            },
+          },
+        },
+      },
     });
 
     for (const item of menuItems) {
@@ -86,17 +121,30 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
 
       const amount = kc.count * Number(servingSize.servingSize);
       const existing = totals.get(item.foodItemId);
+
       if (existing) {
         existing.totalAmount += amount;
       } else {
+        const containerSizes: ContainerSizeInput[] =
+          item.foodItem.container?.sizes.map((s) => ({
+            id: s.id,
+            name: s.name,
+            abbreviation: s.abbreviation,
+            size: Number(s.size),
+          })) ?? [];
+
         totals.set(item.foodItemId, {
           foodId: item.foodItemId,
           foodName: item.foodItem.name,
           tempType: item.foodItem.tempType,
           totalAmount: amount,
-          pkSize: item.foodItem.pkSize,
           pkUnit: item.foodItem.pkUnit,
           batch,
+          containerSizes,
+          containerStrategy: item.foodItem.containerStrategy,
+          containerThreshold: item.foodItem.containerThreshold
+            ? Number(item.foodItem.containerThreshold)
+            : null,
         });
       }
     }
@@ -109,10 +157,10 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
         : a.foodName.localeCompare(b.foodName)
     );
 
-  const lsd = sortItems(Array.from(lsdTotals.values()));
-  const tomb = sortItems(Array.from(tombTotals.values()));
+  const lsd = sortItems(Array.from(lsdTotals.values()).map(accToItem));
+  const tomb = sortItems(Array.from(tombTotals.values()).map(accToItem));
 
-  // Merge lsd + tomb by foodId; batch field is not meaningful in the merged list
+  // Merge lsd + tomb by foodId for consumers needing the full undifferentiated list
   const allMap = new Map<number, ProductionItem>();
   for (const item of [...lsd, ...tomb]) {
     const ex = allMap.get(item.foodId);
@@ -120,6 +168,18 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
       ex.totalAmount += item.totalAmount;
     } else {
       allMap.set(item.foodId, { ...item });
+    }
+  }
+  // Re-run packs on merged totals (amounts differ from individual batches)
+  for (const item of allMap.values()) {
+    const acc = lsdTotals.get(item.foodId) ?? tombTotals.get(item.foodId);
+    if (acc) {
+      item.packs = packContainers(
+        item.totalAmount,
+        acc.containerSizes,
+        acc.containerStrategy,
+        acc.containerThreshold
+      );
     }
   }
   const all = sortItems(Array.from(allMap.values()));

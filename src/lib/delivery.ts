@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/db";
 import { getCycleWeek, getDayId, schoolDeliversOn, getBatch } from "@/lib/cycle";
+import { packContainers, formatPacks, type PackResult, type ContainerSizeInput } from "@/lib/containers";
+
+export type { PackResult };
 
 export type DeliveryFoodLine = {
   foodId: number;
@@ -9,8 +12,8 @@ export type DeliveryFoodLine = {
   batch: "LSD" | "TomB";
   totalAmount: number;
   pkUnit: string | null;
-  pkSize: number | null;
-  packsNeeded: number | null;
+  packs: PackResult[];
+  packsLabel: string;
 };
 
 export type DeliverySchool = {
@@ -72,10 +75,31 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
 
     const menuItems = await prisma.menuItem.findMany({
       where: { menuId: menu.id, week: cycleWeek, dayId },
-      include: { foodItem: true, meal: true },
+      include: {
+        foodItem: {
+          include: {
+            container: { include: { sizes: { orderBy: { size: "desc" } } } },
+          },
+        },
+        meal: true,
+      },
     });
 
-    const lineMap = new Map<string, DeliveryFoodLine>();
+    // Accumulate amount per food × meal, then compute packs after
+    type LineAcc = {
+      foodId: number;
+      foodName: string;
+      mealId: number;
+      mealName: string;
+      batch: "LSD" | "TomB";
+      totalAmount: number;
+      pkUnit: string | null;
+      containerSizes: ContainerSizeInput[];
+      containerStrategy: string;
+      containerThreshold: number | null;
+    };
+
+    const lineMap = new Map<string, LineAcc>();
 
     for (const mi of menuItems) {
       const mealCounts = schoolKidCounts.filter((kc) => kc.mealId === mi.mealId);
@@ -97,26 +121,62 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
 
       if (totalAmount === 0) continue;
 
-      const batch = getBatch(mi.meal.name, menu.delaySnack);
       const key = `${mi.foodItemId}-${mi.mealId}`;
       const existing = lineMap.get(key);
       if (existing) {
         existing.totalAmount += totalAmount;
       } else {
-        const pkSize = mi.foodItem.pkSize;
+        const containerSizes: ContainerSizeInput[] =
+          mi.foodItem.container?.sizes.map((s) => ({
+            id: s.id,
+            name: s.name,
+            abbreviation: s.abbreviation,
+            size: Number(s.size),
+          })) ?? [];
+
         lineMap.set(key, {
           foodId: mi.foodItemId,
           foodName: mi.foodItem.name,
           mealId: mi.mealId,
           mealName: mi.meal.name,
-          batch,
+          batch: getBatch(mi.meal.name, menu.delaySnack),
           totalAmount,
           pkUnit: mi.foodItem.pkUnit,
-          pkSize,
-          packsNeeded: pkSize ? Math.ceil(totalAmount / pkSize) : null,
+          containerSizes,
+          containerStrategy: mi.foodItem.containerStrategy,
+          containerThreshold: mi.foodItem.containerThreshold
+            ? Number(mi.foodItem.containerThreshold)
+            : null,
         });
       }
     }
+
+    const lines: DeliveryFoodLine[] = Array.from(lineMap.values())
+      .map((acc) => {
+        const packs = packContainers(
+          acc.totalAmount,
+          acc.containerSizes,
+          acc.containerStrategy,
+          acc.containerThreshold
+        );
+        return {
+          foodId: acc.foodId,
+          foodName: acc.foodName,
+          mealId: acc.mealId,
+          mealName: acc.mealName,
+          batch: acc.batch,
+          totalAmount: acc.totalAmount,
+          pkUnit: acc.pkUnit,
+          packs,
+          packsLabel: formatPacks(packs),
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.batch.localeCompare(b.batch) ||
+          a.mealName.localeCompare(b.mealName) ||
+          a.foodName.localeCompare(b.foodName)
+      );
 
     results.push({
       schoolId: school.id,
@@ -128,12 +188,7 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
       routeId: school.routeId,
       isClosed: closedIds.has(school.id),
       totalKids,
-      lines: Array.from(lineMap.values()).sort(
-        (a, b) =>
-          a.batch.localeCompare(b.batch) ||
-          a.mealName.localeCompare(b.mealName) ||
-          a.foodName.localeCompare(b.foodName)
-      ),
+      lines,
     });
   }
 

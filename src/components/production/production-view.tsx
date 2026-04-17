@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProductionResult, ProductionItem } from "@/lib/production";
+import { formatPacks } from "@/lib/containers";
 
 export type ProductionDayData = {
   deliveryDateStr: string; // YYYY-MM-DD
@@ -30,26 +31,21 @@ function ItemTable({ items }: { items: ProductionItem[] }) {
           <TableRow>
             <TableHead>Food Item</TableHead>
             <TableHead className="text-right">Total Amount</TableHead>
-            <TableHead className="text-right">Pk Size</TableHead>
-            <TableHead className="text-right">Packs Needed</TableHead>
+            <TableHead>Containers</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item) => {
-            const packs = item.pkSize ? Math.ceil(item.totalAmount / item.pkSize) : null;
-            return (
-              <TableRow key={item.foodId}>
-                <TableCell className="font-medium">{item.foodName}</TableCell>
-                <TableCell className="text-right">
-                  {item.totalAmount.toFixed(2)} {item.pkUnit ?? ""}
-                </TableCell>
-                <TableCell className="text-right">
-                  {item.pkSize ? `${item.pkSize} ${item.pkUnit ?? ""}` : "—"}
-                </TableCell>
-                <TableCell className="text-right font-semibold">{packs ?? "—"}</TableCell>
-              </TableRow>
-            );
-          })}
+          {items.map((item) => (
+            <TableRow key={item.foodId}>
+              <TableCell className="font-medium">{item.foodName}</TableCell>
+              <TableCell className="text-right">
+                {item.totalAmount.toFixed(2)} {item.pkUnit ?? ""}
+              </TableCell>
+              <TableCell className="font-semibold text-sm">
+                {formatPacks(item.packs)}
+              </TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>

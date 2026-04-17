@@ -25,6 +25,7 @@ type FoodItem = {
   foodTypeId: number | null;
   menuTypeId: number | null;
   containerThreshold: unknown;
+  containerStrategy: string;
 };
 
 type Container = { id: number; name: string };
@@ -39,6 +40,7 @@ type FormState = {
   menuTypeId: number | null;
   defaultContainerId: number | null;
   containerThreshold: number | null;
+  containerStrategy: "LeastContainers" | "LeastWaste" | "Threshold";
   pkSize: number | null;
   pkUnit: string;
 };
@@ -46,7 +48,8 @@ type FormState = {
 const empty: FormState = {
   name: "", tempType: "hot", isMilk: false, hasLabel: true,
   showOnReport: true, foodTypeId: null, menuTypeId: null,
-  defaultContainerId: null, containerThreshold: null, pkSize: null, pkUnit: "",
+  defaultContainerId: null, containerThreshold: null,
+  containerStrategy: "LeastContainers", pkSize: null, pkUnit: "",
 };
 
 export function FoodItemsTable({ foodItems, containers }: { foodItems: FoodItem[]; containers: Container[] }) {
@@ -72,6 +75,7 @@ export function FoodItemsTable({ foodItems, containers }: { foodItems: FoodItem[
       menuTypeId: f.menuTypeId ?? null,
       defaultContainerId: f.defaultContainerId ?? null,
       containerThreshold: f.containerThreshold ? Number(f.containerThreshold) : null,
+      containerStrategy: (f.containerStrategy as FormState["containerStrategy"]) ?? "LeastContainers",
       pkSize: f.pkSize ?? null,
       pkUnit: f.pkUnit ?? "",
     });
@@ -180,6 +184,33 @@ export function FoodItemsTable({ foodItems, containers }: { foodItems: FoodItem[
               <div className="space-y-1">
                 <Label>Pk Unit</Label>
                 <Input value={form.pkUnit ?? ""} onChange={(e) => setForm({ ...form, pkUnit: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label>Container Strategy</Label>
+                <Select
+                  value={form.containerStrategy}
+                  onValueChange={(v) => setForm({ ...form, containerStrategy: v as FormState["containerStrategy"] })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LeastContainers">Least Containers</SelectItem>
+                    <SelectItem value="LeastWaste">Least Waste</SelectItem>
+                    <SelectItem value="Threshold">Threshold</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Threshold (0–1)</Label>
+                <Input
+                  type="number"
+                  step="0.05"
+                  min="0"
+                  max="1"
+                  placeholder="e.g. 0.25"
+                  value={form.containerThreshold ?? ""}
+                  onChange={(e) => setForm({ ...form, containerThreshold: e.target.value ? Number(e.target.value) : null })}
+                  disabled={form.containerStrategy !== "Threshold"}
+                />
               </div>
             </div>
             <div className="flex gap-6">

@@ -21,6 +21,7 @@ type FoodItem = {
   hasLabel: boolean; showOnReport: boolean; pkUnit: string | null;
   pkSize: number | null; defaultContainerId: number | null;
   foodTypeId: number | null; menuTypeId: number | null; containerThreshold: unknown;
+  containerStrategy: string;
 };
 type Container = { id: number; name: string };
 type User = { id: string; name: string | null; email: string; role: string; createdAt: Date };

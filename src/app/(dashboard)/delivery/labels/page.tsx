@@ -31,7 +31,7 @@ export default async function LabelsPage({ searchParams }: { searchParams: { dat
       meal: line.mealName,
       foodItem: line.foodName,
       amount: `${line.totalAmount.toFixed(2)}${line.pkUnit ? ` ${line.pkUnit}` : ""}`,
-      packs: line.packsNeeded,
+      packs: line.packsLabel,
     }))
   );
 
@@ -69,8 +69,8 @@ export default async function LabelsPage({ searchParams }: { searchParams: { dat
               <div className="border-t my-1" />
               <div className="flex justify-between">
                 <span>Amount: <strong>{label.amount}</strong></span>
-                {label.packs !== null && (
-                  <span>Packs: <strong>{label.packs}</strong></span>
+                {label.packs && label.packs !== "—" && (
+                  <span>Containers: <strong>{label.packs}</strong></span>
                 )}
               </div>
             </div>

@@ -3,6 +3,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LookupTable } from "./lookup-table";
 import { FoodItemsTable } from "./food-items-table";
+import { UsersTab } from "./users-tab";
+import { AuditLogTab } from "./audit-log-tab";
 import {
   createRoute, updateRoute, deleteRoute,
   createCounty, updateCounty, deleteCounty,
@@ -21,6 +23,12 @@ type FoodItem = {
   foodTypeId: number | null; menuTypeId: number | null; containerThreshold: unknown;
 };
 type Container = { id: number; name: string };
+type User = { id: string; name: string | null; email: string; role: string; createdAt: Date };
+type AuditEntry = {
+  id: number; schoolName: string; date: Date; mealName: string;
+  ageGroupName: string; oldCount: number; newCount: number;
+  userName: string | null; userEmail: string; changedAt: Date;
+};
 
 interface AdminTabsProps {
   routes: Route[];
@@ -29,20 +37,36 @@ interface AdminTabsProps {
   meals: Meal[];
   foodItems: FoodItem[];
   containers: Container[];
+  users: User[];
+  currentUserId: string;
+  auditEntries: AuditEntry[];
 }
 
-export function AdminTabs({ routes, counties, ageGroups, meals, foodItems, containers }: AdminTabsProps) {
+export function AdminTabs({
+  routes, counties, ageGroups, meals, foodItems, containers,
+  users, currentUserId, auditEntries,
+}: AdminTabsProps) {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Admin</h1>
-      <Tabs defaultValue="routes">
-        <TabsList className="mb-4">
+      <Tabs defaultValue="users">
+        <TabsList className="mb-4 flex-wrap h-auto">
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="audit">Audit Log</TabsTrigger>
           <TabsTrigger value="routes">Routes</TabsTrigger>
           <TabsTrigger value="counties">Counties</TabsTrigger>
           <TabsTrigger value="ageGroups">Age Groups</TabsTrigger>
           <TabsTrigger value="meals">Meals</TabsTrigger>
           <TabsTrigger value="food">Food Items</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="users">
+          <UsersTab users={users} currentUserId={currentUserId} />
+        </TabsContent>
+
+        <TabsContent value="audit">
+          <AuditLogTab entries={auditEntries} />
+        </TabsContent>
 
         <TabsContent value="routes">
           <LookupTable

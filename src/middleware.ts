@@ -1,5 +1,7 @@
 import { auth } from "@/lib/auth";
 
+const ADMIN_ROUTES = ["/schools", "/menus", "/admin", "/billing"];
+
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
   const isLoginPage = req.nextUrl.pathname === "/login";
@@ -10,6 +12,15 @@ export default auth((req) => {
 
   if (isLoggedIn && isLoginPage) {
     return Response.redirect(new URL("/", req.nextUrl));
+  }
+
+  if (isLoggedIn) {
+    const role = (req.auth?.user as { role?: string })?.role;
+    const path = req.nextUrl.pathname;
+    const isAdminRoute = ADMIN_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
+    if (role !== "admin" && isAdminRoute) {
+      return Response.redirect(new URL("/", req.nextUrl));
+    }
   }
 });
 

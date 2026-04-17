@@ -11,9 +11,11 @@ export default async function DashboardLayout({
   const session = await auth();
   if (!session) redirect("/login");
 
+  const role = (session.user as { role?: string }).role ?? "staff";
+
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar role={role} />
       <main className="flex flex-1 flex-col">
         <header className="flex h-14 items-center border-b px-4">
           <SidebarTrigger />

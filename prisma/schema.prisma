@@ -10,12 +10,13 @@ datasource db {
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 model User {
-  id        String   @id @default(cuid())
-  name      String?
-  email     String   @unique
-  password  String
-  role      String   @default("staff")
-  createdAt DateTime @default(now())
+  id            String          @id @default(cuid())
+  name          String?
+  email         String          @unique
+  password      String
+  role          String          @default("staff")
+  createdAt     DateTime        @default(now())
+  kidCountAudit KidCountAudit[]
 }
 
 // ─── Reference / Lookup ──────────────────────────────────────────────────────
@@ -279,6 +280,24 @@ model BillingRunDetail {
   kidCount     Int
   priceUsed    Decimal    @db.Decimal(10, 2)
   billingRun   BillingRun @relation(fields: [billingRunId], references: [id])
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model KidCountAudit {
+  id         Int      @id @default(autoincrement())
+  schoolId   Int
+  date       DateTime @db.Date
+  mealId     Int
+  ageGroupId Int
+  oldCount   Int
+  newCount   Int
+  userId     String
+  changedAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([date])
+  @@index([schoolId, date])
 }
 
 // ─── Milk Overrides ───────────────────────────────────────────────────────────

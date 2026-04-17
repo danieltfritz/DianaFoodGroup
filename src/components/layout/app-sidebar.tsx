@@ -41,7 +41,7 @@ const adminItems = [
   { title: "Admin", href: "/admin", icon: Settings },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ role }: { role: string }) {
   const pathname = usePathname();
 
   return (
@@ -68,19 +68,21 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Management</SidebarGroupLabel>
-          <SidebarMenu>
-            {adminItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton render={<Link href={item.href} />} isActive={pathname === item.href}>
-                  <item.icon className="size-4" />
-                  <span>{item.title}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
+        {role === "admin" && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Management</SidebarGroupLabel>
+            <SidebarMenu>
+              {adminItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton render={<Link href={item.href} />} isActive={pathname === item.href}>
+                    <item.icon className="size-4" />
+                    <span>{item.title}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t p-4">

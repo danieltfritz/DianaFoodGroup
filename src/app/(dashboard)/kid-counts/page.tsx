@@ -2,15 +2,18 @@ import { prisma } from "@/lib/db";
 import { schoolDeliversOn } from "@/lib/cycle";
 import { KidCountGrid } from "@/components/kid-counts/kid-count-grid";
 import { DateNav } from "@/components/kid-counts/date-nav";
+import { CopyLastWeekButton } from "@/components/kid-counts/copy-last-week-button";
 
 export default async function KidCountsPage({
   searchParams,
 }: {
-  searchParams: { date?: string };
+  searchParams: Promise<{ date?: string }>;
 }) {
+  const { date: dateParam } = await searchParams;
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dateStr = searchParams.date ?? today.toISOString().split("T")[0];
+  const dateStr = dateParam ?? today.toISOString().split("T")[0];
   const date = new Date(dateStr);
 
   const [allSchools, meals, ageGroups, existingCounts, closings] = await Promise.all([
@@ -31,9 +34,7 @@ export default async function KidCountsPage({
     }),
     prisma.meal.findMany({ orderBy: { id: "asc" } }),
     prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
-    prisma.kidCount.findMany({
-      where: { date },
-    }),
+    prisma.kidCount.findMany({ where: { date } }),
     prisma.schoolClosing.findMany({
       where: { startDate: { lte: date }, endDate: { gte: date } },
     }),
@@ -41,7 +42,6 @@ export default async function KidCountsPage({
 
   const closedSchoolIds = new Set(closings.map((c) => c.schoolId));
 
-  // Only include schools that deliver on this day and have an active menu
   const schools = allSchools
     .filter((s) => s.schoolMenus.length > 0 && schoolDeliversOn(s, date))
     .map((s) => {
@@ -65,7 +65,10 @@ export default async function KidCountsPage({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Kid Counts</h1>
-        <DateNav date={dateStr} />
+        <div className="flex items-center gap-3">
+          <CopyLastWeekButton date={dateStr} />
+          <DateNav date={dateStr} />
+        </div>
       </div>
       <p className="text-sm text-muted-foreground">
         {schools.filter((s) => !s.isClosed).length} schools delivering · Click away from a cell to save

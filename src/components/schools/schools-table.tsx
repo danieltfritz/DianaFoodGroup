@@ -38,6 +38,7 @@ type School = {
   notes: string | null;
   routeId: number | null;
   countyId: number | null;
+  milkTier: string;
 };
 
 type Route = { id: number; name: string };
@@ -151,6 +152,7 @@ export function SchoolsTable({ schools, routes, counties }: { schools: School[];
           <SchoolForm
             defaultValues={editing ? {
               ...editing,
+              milkTier: (editing.milkTier as "small" | "medium" | "large") ?? "medium",
               address: editing.address ?? undefined,
               city: editing.city ?? undefined,
               state: editing.state ?? undefined,

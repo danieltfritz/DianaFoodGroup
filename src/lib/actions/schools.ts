@@ -25,6 +25,7 @@ const SchoolSchema = z.object({
   deliverySun: z.boolean().default(false),
   notes: z.string().optional(),
   active: z.boolean().default(true),
+  milkTier: z.enum(["small", "medium", "large"]).default("medium"),
 });
 
 export async function createSchool(data: z.infer<typeof SchoolSchema>) {

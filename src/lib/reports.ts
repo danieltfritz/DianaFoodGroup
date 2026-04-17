@@ -177,11 +177,30 @@ export async function getContainerReport(deliveryDate: Date): Promise<ContainerR
 
 // ─── Milk Report ──────────────────────────────────────────────────────────────
 
+const MILK_OVERAGE: Record<string, number> = {
+  small: 1.65,
+  medium: 1.50,
+  large: 1.05,
+};
+
+export type MilkItem = {
+  foodId: number;
+  foodName: string;
+  mealName: string;
+  rawAmount: number;       // oz from kid counts × serving sizes
+  pkSize: number | null;   // oz per container unit
+  pkUnit: string | null;
+  orderedUnits: number | null; // containers to order after overage + rounding
+  orderedAmount: number;   // oz after overage, rounded up to nearest pkSize
+};
+
 export type MilkSchoolRow = {
   schoolId: number;
   schoolName: string;
   route: string | null;
-  items: { foodId: number; foodName: string; mealName: string; totalAmount: number; pkUnit: string | null }[];
+  milkTier: string;
+  overagePct: number; // e.g. 50 for 50%
+  items: MilkItem[];
 };
 
 export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]> {
@@ -210,10 +229,14 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
 
   if (kidCounts.length === 0) return [];
 
-  const schoolMap = new Map<
-    number,
-    { schoolName: string; route: string | null; items: Map<string, { foodId: number; foodName: string; mealName: string; totalAmount: number; pkUnit: string | null }> }
-  >();
+  type SchoolAcc = {
+    schoolName: string;
+    route: string | null;
+    milkTier: string;
+    items: Map<string, { foodId: number; foodName: string; mealName: string; rawAmount: number; pkSize: number | null; pkUnit: string | null }>;
+  };
+
+  const schoolMap = new Map<number, SchoolAcc>();
 
   for (const kc of kidCounts) {
     const menu = kc.schoolMenu.menu;
@@ -248,6 +271,7 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
         schoolRow = {
           schoolName: kc.school.name,
           route: kc.school.route?.name ?? null,
+          milkTier: kc.school.milkTier,
           items: new Map(),
         };
         schoolMap.set(kc.schoolId, schoolRow);
@@ -256,13 +280,14 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
       const key = `${mi.foodItemId}-${kc.mealId}`;
       const existing = schoolRow.items.get(key);
       if (existing) {
-        existing.totalAmount += amount;
+        existing.rawAmount += amount;
       } else {
         schoolRow.items.set(key, {
           foodId: mi.foodItemId,
           foodName: mi.foodItem.name,
           mealName: kc.meal.name,
-          totalAmount: amount,
+          rawAmount: amount,
+          pkSize: mi.foodItem.pkSize,
           pkUnit: mi.foodItem.pkUnit,
         });
       }
@@ -270,13 +295,24 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
   }
 
   return Array.from(schoolMap.entries())
-    .map(([schoolId, { schoolName, route, items }]) => ({
-      schoolId,
-      schoolName,
-      route,
-      items: Array.from(items.values()).sort((a, b) =>
-        a.mealName.localeCompare(b.mealName) || a.foodName.localeCompare(b.foodName)
-      ),
-    }))
+    .map(([schoolId, { schoolName, route, milkTier, items }]) => {
+      const multiplier = MILK_OVERAGE[milkTier] ?? MILK_OVERAGE.medium;
+      const overagePct = Math.round((multiplier - 1) * 100);
+
+      const milkItems: MilkItem[] = Array.from(items.values())
+        .sort((a, b) => a.mealName.localeCompare(b.mealName) || a.foodName.localeCompare(b.foodName))
+        .map((item) => {
+          const afterOverage = item.rawAmount * multiplier;
+          const orderedUnits = item.pkSize
+            ? Math.ceil(afterOverage / item.pkSize)
+            : null;
+          const orderedAmount = orderedUnits && item.pkSize
+            ? orderedUnits * item.pkSize
+            : Math.ceil(afterOverage);
+          return { ...item, orderedUnits, orderedAmount };
+        });
+
+      return { schoolId, schoolName, route, milkTier, overagePct, items: milkItems };
+    })
     .sort((a, b) => (a.route ?? "zzz").localeCompare(b.route ?? "zzz") || a.schoolName.localeCompare(b.schoolName));
 }

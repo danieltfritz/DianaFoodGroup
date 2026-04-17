@@ -87,6 +87,7 @@ model School {
   deliverySun    Boolean              @default(false)
   notes          String?
   active         Boolean              @default(true)
+  milkTier       String               @default("medium") @db.VarChar(10)
   route          Route?               @relation(fields: [routeId], references: [id])
   county         County?              @relation(fields: [countyId], references: [id])
   schoolMenus    SchoolMenu[]

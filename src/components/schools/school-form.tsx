@@ -37,6 +37,7 @@ const schema = z.object({
   deliverySun: z.boolean(),
   notes: z.string().optional(),
   active: z.boolean(),
+  milkTier: z.enum(["small", "medium", "large"]),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -77,6 +78,7 @@ export function SchoolForm({ defaultValues, routes, counties, onSubmit, onCancel
       deliverySun: false,
       routeId: null,
       countyId: null,
+      milkTier: "medium" as const,
       ...defaultValues,
     },
   });
@@ -151,6 +153,21 @@ export function SchoolForm({ defaultValues, routes, counties, onSubmit, onCancel
               {counties.map((c) => (
                 <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label>Milk Overage Tier</Label>
+          <Select
+            value={watch("milkTier")}
+            onValueChange={(v) => setValue("milkTier", v as "small" | "medium" | "large")}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="small">Small (+65% overage)</SelectItem>
+              <SelectItem value="medium">Medium (+50% overage)</SelectItem>
+              <SelectItem value="large">Large (+5% overage)</SelectItem>
             </SelectContent>
           </Select>
         </div>

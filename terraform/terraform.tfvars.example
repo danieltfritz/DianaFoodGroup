@@ -1,0 +1,20 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# Never commit terraform.tfvars to git — it contains secrets.
+
+project_name = "ccfp"
+environment  = "prod"
+location     = "eastus"
+
+# App Service
+app_service_sku = "B2"   # Upgrade to P1v3 for autoscale / deployment slots
+node_version    = "20-lts"
+
+# Azure SQL — choose a login name that is NOT: admin, administrator, sa, root, guest
+sql_admin_login    = "ccfpadmin"
+sql_admin_password = "REPLACE_WITH_STRONG_PASSWORD_Aa1!"
+
+# SQL database tier: S0 (~$15/mo), S1 (~$30/mo), S2 (~$75/mo)
+sql_database_sku = "S1"
+
+# Generate with:  openssl rand -base64 32
+nextauth_secret = "REPLACE_WITH_GENERATED_SECRET"

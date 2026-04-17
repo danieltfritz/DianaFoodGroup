@@ -66,7 +66,7 @@ export async function upsertServingSize(data: z.infer<typeof ServingSizeSchema>)
   const parsed = ServingSizeSchema.parse(data);
   await prisma.servingSize.upsert({
     where: { mealId_foodItemId_ageGroupId: { mealId: parsed.mealId, foodItemId: parsed.foodItemId, ageGroupId: parsed.ageGroupId } },
-    create: parsed,
+    create: { mealId: parsed.mealId, foodItemId: parsed.foodItemId, ageGroupId: parsed.ageGroupId, servingSize: parsed.servingSize },
     update: { servingSize: parsed.servingSize },
   });
   revalidatePath("/admin");

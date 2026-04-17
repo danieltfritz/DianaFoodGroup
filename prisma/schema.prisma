@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlserver"
   url      = env("DATABASE_URL")
 }
 
@@ -137,6 +137,7 @@ model FoodItem {
 }
 
 model ServingSize {
+  id          Int      @id @default(autoincrement())
   mealId      Int
   foodItemId  Int
   ageGroupId  Int
@@ -145,7 +146,7 @@ model ServingSize {
   foodItem    FoodItem @relation(fields: [foodItemId], references: [id])
   ageGroup    AgeGroup @relation(fields: [ageGroupId], references: [id])
 
-  @@id([mealId, foodItemId, ageGroupId])
+  @@unique([mealId, foodItemId, ageGroupId])
 }
 
 // ─── Menus ────────────────────────────────────────────────────────────────────
@@ -208,10 +209,10 @@ model KidCount {
   ageGroupId   Int
   count        Int
   updatedAt    DateTime   @updatedAt
-  school       School     @relation(fields: [schoolId], references: [id])
-  schoolMenu   SchoolMenu @relation(fields: [schoolMenuId], references: [id])
-  meal         Meal       @relation(fields: [mealId], references: [id])
-  ageGroup     AgeGroup   @relation(fields: [ageGroupId], references: [id])
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schoolMenu   SchoolMenu @relation(fields: [schoolMenuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  meal         Meal       @relation(fields: [mealId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ageGroup     AgeGroup   @relation(fields: [ageGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([schoolId, date, mealId, ageGroupId])
   @@index([date])
@@ -227,12 +228,13 @@ model BillingGroup {
 }
 
 model BillingSchoolGroup {
+  id             Int          @id @default(autoincrement())
   billingGroupId Int
   schoolId       Int
   billingGroup   BillingGroup @relation(fields: [billingGroupId], references: [id])
   school         School       @relation(fields: [schoolId], references: [id])
 
-  @@id([billingGroupId, schoolId])
+  @@unique([billingGroupId, schoolId])
 }
 
 model MealPrice {
@@ -242,10 +244,10 @@ model MealPrice {
   mealId       Int
   ageGroupId   Int
   price        Decimal    @db.Decimal(10, 2)
-  schoolMenu   SchoolMenu @relation(fields: [schoolMenuId], references: [id])
-  school       School     @relation(fields: [schoolId], references: [id])
-  meal         Meal       @relation(fields: [mealId], references: [id])
-  ageGroup     AgeGroup   @relation(fields: [ageGroupId], references: [id])
+  schoolMenu   SchoolMenu @relation(fields: [schoolMenuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  meal         Meal       @relation(fields: [mealId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ageGroup     AgeGroup   @relation(fields: [ageGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([schoolMenuId, schoolId, mealId, ageGroupId])
 }

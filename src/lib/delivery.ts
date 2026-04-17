@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/db";
-import { getCycleWeek, getDayId, schoolDeliversOn } from "@/lib/cycle";
+import { getCycleWeek, getDayId, schoolDeliversOn, getBatch } from "@/lib/cycle";
 
 export type DeliveryFoodLine = {
   foodId: number;
   foodName: string;
   mealId: number;
   mealName: string;
+  batch: "LSD" | "TomB";
   totalAmount: number;
   pkUnit: string | null;
   pkSize: number | null;
@@ -25,8 +26,8 @@ export type DeliverySchool = {
   lines: DeliveryFoodLine[];
 };
 
-export async function getDeliveryData(date: Date): Promise<DeliverySchool[]> {
-  const dayId = getDayId(date);
+export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchool[]> {
+  const dayId = getDayId(deliveryDate);
 
   const [allSchools, kidCounts, closings] = await Promise.all([
     prisma.school.findMany({
@@ -35,8 +36,8 @@ export async function getDeliveryData(date: Date): Promise<DeliverySchool[]> {
         route: true,
         schoolMenus: {
           where: {
-            startDate: { lte: date },
-            OR: [{ endDate: null }, { endDate: { gte: date } }],
+            startDate: { lte: deliveryDate },
+            OR: [{ endDate: null }, { endDate: { gte: deliveryDate } }],
           },
           include: { menu: true },
           take: 1,
@@ -46,17 +47,17 @@ export async function getDeliveryData(date: Date): Promise<DeliverySchool[]> {
       orderBy: [{ route: { name: "asc" } }, { name: "asc" }],
     }),
     prisma.kidCount.findMany({
-      where: { date, count: { gt: 0 } },
+      where: { date: deliveryDate, count: { gt: 0 } },
       include: { meal: true, ageGroup: true },
     }),
     prisma.schoolClosing.findMany({
-      where: { startDate: { lte: date }, endDate: { gte: date } },
+      where: { startDate: { lte: deliveryDate }, endDate: { gte: deliveryDate } },
     }),
   ]);
 
   const closedIds = new Set(closings.map((c) => c.schoolId));
   const activeSchools = allSchools.filter(
-    (s) => s.schoolMenus.length > 0 && schoolDeliversOn(s, date)
+    (s) => s.schoolMenus.length > 0 && schoolDeliversOn(s, deliveryDate)
   );
 
   const results: DeliverySchool[] = [];
@@ -64,7 +65,7 @@ export async function getDeliveryData(date: Date): Promise<DeliverySchool[]> {
   for (const school of activeSchools) {
     const schoolMenu = school.schoolMenus[0];
     const menu = schoolMenu.menu;
-    const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
+    const cycleWeek = getCycleWeek(deliveryDate, menu.effectiveDate, menu.cycleWeeks);
 
     const schoolKidCounts = kidCounts.filter((kc) => kc.schoolId === school.id);
     const totalKids = schoolKidCounts.reduce((s, kc) => s + kc.count, 0);
@@ -74,7 +75,6 @@ export async function getDeliveryData(date: Date): Promise<DeliverySchool[]> {
       include: { foodItem: true, meal: true },
     });
 
-    // Aggregate: food × meal → total amount across all age groups
     const lineMap = new Map<string, DeliveryFoodLine>();
 
     for (const mi of menuItems) {
@@ -97,6 +97,7 @@ export async function getDeliveryData(date: Date): Promise<DeliverySchool[]> {
 
       if (totalAmount === 0) continue;
 
+      const batch = getBatch(mi.meal.name, menu.delaySnack);
       const key = `${mi.foodItemId}-${mi.mealId}`;
       const existing = lineMap.get(key);
       if (existing) {
@@ -108,6 +109,7 @@ export async function getDeliveryData(date: Date): Promise<DeliverySchool[]> {
           foodName: mi.foodItem.name,
           mealId: mi.mealId,
           mealName: mi.meal.name,
+          batch,
           totalAmount,
           pkUnit: mi.foodItem.pkUnit,
           pkSize,
@@ -126,8 +128,11 @@ export async function getDeliveryData(date: Date): Promise<DeliverySchool[]> {
       routeId: school.routeId,
       isClosed: closedIds.has(school.id),
       totalKids,
-      lines: Array.from(lineMap.values()).sort((a, b) =>
-        a.mealName.localeCompare(b.mealName) || a.foodName.localeCompare(b.foodName)
+      lines: Array.from(lineMap.values()).sort(
+        (a, b) =>
+          a.batch.localeCompare(b.batch) ||
+          a.mealName.localeCompare(b.mealName) ||
+          a.foodName.localeCompare(b.foodName)
       ),
     });
   }

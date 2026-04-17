@@ -17,7 +17,8 @@ export type SchoolSummaryRow = {
   grandTotal: number;
 };
 
-export async function getSchoolSummary(date: Date): Promise<SchoolSummaryRow[]> {
+export async function getSchoolSummary(deliveryDate: Date): Promise<SchoolSummaryRow[]> {
+  const date = deliveryDate;
   const [kidCounts, closings, meals, ageGroups] = await Promise.all([
     prisma.kidCount.findMany({
       where: { date, count: { gt: 0 } },
@@ -90,7 +91,8 @@ export type ContainerRow = {
   containerUnits: string | null;
 };
 
-export async function getContainerReport(date: Date): Promise<ContainerRow[]> {
+export async function getContainerReport(deliveryDate: Date): Promise<ContainerRow[]> {
+  const date = deliveryDate;
   const dayId = getDayId(date);
 
   const closedIds = (
@@ -182,7 +184,8 @@ export type MilkSchoolRow = {
   items: { foodId: number; foodName: string; mealName: string; totalAmount: number; pkUnit: string | null }[];
 };
 
-export async function getMilkReport(date: Date): Promise<MilkSchoolRow[]> {
+export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]> {
+  const date = deliveryDate;
   const dayId = getDayId(date);
 
   const closedIds = (

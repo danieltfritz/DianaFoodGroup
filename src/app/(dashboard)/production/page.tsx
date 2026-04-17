@@ -1,84 +1,57 @@
-import { calculateProduction } from "@/lib/production";
+import { calculateProduction, getDeliveryDatesForProductionDate } from "@/lib/production";
 import { DateNav } from "@/components/kid-counts/date-nav";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ProductionView } from "@/components/production/production-view";
 
 export default async function ProductionPage({
   searchParams,
 }: {
-  searchParams: { date?: string };
+  searchParams: Promise<{ date?: string }>;
 }) {
+  const { date: dateParam } = await searchParams;
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dateStr = searchParams.date ?? today.toISOString().split("T")[0];
-  const date = new Date(dateStr);
+  const dateStr = dateParam ?? today.toISOString().split("T")[0];
+  const productionDate = new Date(dateStr + "T00:00:00");
 
-  const items = await calculateProduction(date);
+  const deliveryDates = getDeliveryDatesForProductionDate(productionDate);
+  const results = await Promise.all(deliveryDates.map((d) => calculateProduction(d)));
 
-  const hot = items.filter((i) => i.tempType === "hot");
-  const cold = items.filter((i) => i.tempType === "cold");
+  const days = deliveryDates.map((d, i) => ({
+    deliveryDateStr: d.toISOString().split("T")[0],
+    result: results[i],
+  }));
+
+  const productionLabel = productionDate.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+
+  const isThursday = deliveryDates.length > 1;
+  const deliveryLabel = isThursday
+    ? "Friday + Saturday + Sunday delivery"
+    : deliveryDates[0].toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      });
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Production Report</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Production</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Producing on <strong>{productionLabel}</strong>
+            {" · "}
+            Delivering <strong>{deliveryLabel}</strong>
+          </p>
+        </div>
         <DateNav date={dateStr} />
       </div>
 
-      {items.length === 0 ? (
-        <p className="text-muted-foreground text-sm py-8 text-center">
-          No production data for this date. Enter kid counts first.
-        </p>
-      ) : (
-        <>
-          {[{ label: "Hot Items", items: hot }, { label: "Cold Items", items: cold }].map(
-            ({ label, items: group }) =>
-              group.length > 0 && (
-                <div key={label} className="space-y-2">
-                  <h2 className="font-semibold text-lg flex items-center gap-2">
-                    {label}
-                    <Badge variant={label.startsWith("Hot") ? "destructive" : "secondary"}>
-                      {group.length}
-                    </Badge>
-                  </h2>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Food Item</TableHead>
-                          <TableHead className="text-right">Total Amount</TableHead>
-                          <TableHead className="text-right">Pk Size</TableHead>
-                          <TableHead className="text-right">Packs Needed</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {group.map((item) => {
-                          const packs = item.pkSize
-                            ? Math.ceil(item.totalAmount / item.pkSize)
-                            : null;
-                          return (
-                            <TableRow key={item.foodId}>
-                              <TableCell className="font-medium">{item.foodName}</TableCell>
-                              <TableCell className="text-right">
-                                {item.totalAmount.toFixed(2)} {item.pkUnit ?? ""}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {item.pkSize ? `${item.pkSize} ${item.pkUnit ?? ""}` : "—"}
-                              </TableCell>
-                              <TableCell className="text-right font-semibold">
-                                {packs ?? "—"}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              )
-          )}
-        </>
-      )}
+      <ProductionView days={days} />
     </div>
   );
 }

@@ -30,15 +30,23 @@ export default async function DeliveryTicketPage({
   const data = allDelivery.find((s) => s.schoolId === schoolId);
 
   const dayName = date.toLocaleDateString("en-US", { weekday: "long" });
-  const dateFormatted = date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const dateFormatted = date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
-  // Group lines by meal
-  const byMeal = data
-    ? data.lines.reduce<Record<string, typeof data.lines>>((acc, line) => {
-        (acc[line.mealName] ??= []).push(line);
-        return acc;
-      }, {})
-    : {};
+  const lsdLines = data ? data.lines.filter((l) => l.batch === "LSD") : [];
+  const tombLines = data ? data.lines.filter((l) => l.batch === "TomB") : [];
+
+  const byMeal = (lines: typeof lsdLines) =>
+    lines.reduce<Record<string, typeof lines>>((acc, line) => {
+      (acc[line.mealName] ??= []).push(line);
+      return acc;
+    }, {});
+
+  const lsdByMeal = byMeal(lsdLines);
+  const tombByMeal = byMeal(tombLines);
 
   return (
     <div className="space-y-4">
@@ -59,7 +67,9 @@ export default async function DeliveryTicketPage({
         <div className="flex justify-between items-start mb-6">
           <div>
             <h2 className="text-2xl font-bold">{school.name}</h2>
-            {school.address && <p className="text-sm text-muted-foreground">{school.address}</p>}
+            {school.address && (
+              <p className="text-sm text-muted-foreground">{school.address}</p>
+            )}
             {(school.city || school.state) && (
               <p className="text-sm text-muted-foreground">
                 {[school.city, school.state].filter(Boolean).join(", ")}
@@ -69,45 +79,101 @@ export default async function DeliveryTicketPage({
           <div className="text-right">
             <p className="font-semibold">{dayName}</p>
             <p className="text-sm text-muted-foreground">{dateFormatted}</p>
-            {school.route && <p className="text-sm mt-1">Route: <strong>{school.route.name}</strong></p>}
+            {school.route && (
+              <p className="text-sm mt-1">
+                Route: <strong>{school.route.name}</strong>
+              </p>
+            )}
           </div>
         </div>
 
         {!data || data.lines.length === 0 ? (
-          <p className="text-muted-foreground text-center py-8">No food items for this date.</p>
+          <p className="text-muted-foreground text-center py-8">
+            No food items for this date.
+          </p>
         ) : (
-          <div className="space-y-6">
-            {Object.entries(byMeal).map(([mealName, lines]) => (
-              <div key={mealName}>
-                <h3 className="font-semibold text-lg border-b pb-1 mb-3">{mealName}</h3>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-muted-foreground">
-                      <th className="pb-2 font-medium">Food Item</th>
-                      <th className="pb-2 font-medium text-right">Amount</th>
-                      <th className="pb-2 font-medium text-right">Packs</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((line) => (
-                      <tr key={`${line.foodId}-${line.mealId}`} className="border-t">
-                        <td className="py-1.5">{line.foodName}</td>
-                        <td className="py-1.5 text-right">
-                          {line.totalAmount.toFixed(2)} {line.pkUnit ?? ""}
-                        </td>
-                        <td className="py-1.5 text-right font-semibold">
-                          {line.packsNeeded ?? "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <div className="space-y-8">
+            {/* LSD Section — today's delivery truck */}
+            {lsdLines.length > 0 && (
+              <div>
+                <h3 className="font-bold text-base uppercase tracking-wide border-b pb-1 mb-4">
+                  LSD — Today&apos;s Delivery
+                </h3>
+                <div className="space-y-5">
+                  {Object.entries(lsdByMeal).map(([mealName, lines]) => (
+                    <div key={mealName}>
+                      <h4 className="font-semibold text-sm mb-2">{mealName}</h4>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-muted-foreground">
+                            <th className="pb-1 font-medium">Food Item</th>
+                            <th className="pb-1 font-medium text-right">Amount</th>
+                            <th className="pb-1 font-medium text-right">Packs</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lines.map((line) => (
+                            <tr key={`${line.foodId}-${line.mealId}`} className="border-t">
+                              <td className="py-1.5">{line.foodName}</td>
+                              <td className="py-1.5 text-right">
+                                {line.totalAmount.toFixed(2)} {line.pkUnit ?? ""}
+                              </td>
+                              <td className="py-1.5 text-right font-semibold">
+                                {line.packsNeeded ?? "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
+
+            {/* TomB Section — tomorrow's breakfast cooler */}
+            {tombLines.length > 0 && (
+              <div>
+                <h3 className="font-bold text-base uppercase tracking-wide border-b pb-1 mb-4">
+                  TomB — Tomorrow&apos;s Breakfast
+                </h3>
+                <div className="space-y-5">
+                  {Object.entries(tombByMeal).map(([mealName, lines]) => (
+                    <div key={mealName}>
+                      <h4 className="font-semibold text-sm mb-2">{mealName}</h4>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-muted-foreground">
+                            <th className="pb-1 font-medium">Food Item</th>
+                            <th className="pb-1 font-medium text-right">Amount</th>
+                            <th className="pb-1 font-medium text-right">Packs</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lines.map((line) => (
+                            <tr key={`${line.foodId}-${line.mealId}`} className="border-t">
+                              <td className="py-1.5">{line.foodName}</td>
+                              <td className="py-1.5 text-right">
+                                {line.totalAmount.toFixed(2)} {line.pkUnit ?? ""}
+                              </td>
+                              <td className="py-1.5 text-right font-semibold">
+                                {line.packsNeeded ?? "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="border-t pt-4 flex justify-between text-sm font-semibold">
               <span>Total Kids: {data.totalKids}</span>
-              <span>Total Food Lines: {data.lines.length}</span>
+              <span>
+                LSD: {lsdLines.length} items · TomB: {tombLines.length} items
+              </span>
             </div>
           </div>
         )}

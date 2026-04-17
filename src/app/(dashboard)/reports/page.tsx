@@ -19,12 +19,13 @@ export default async function ReportsPage({
   const dateStr = dateParam ?? today.toISOString().split("T")[0];
   const date = new Date(dateStr);
 
-  const [productionItems, schoolSummary, containerReport, milkReport] = await Promise.all([
+  const [productionResult, schoolSummary, containerReport, milkReport] = await Promise.all([
     calculateProduction(date),
     getSchoolSummary(date),
     getContainerReport(date),
     getMilkReport(date),
   ]);
+  const productionItems = productionResult.all;
 
   const activeTab = tab ?? "summary";
 

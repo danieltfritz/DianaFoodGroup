@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getCycleWeek, getDayId } from "@/lib/cycle";
+import { getCycleWeek, getDayId, addDays, isThursday, getBatch } from "@/lib/cycle";
 
 export type ProductionItem = {
   foodId: number;
@@ -8,22 +8,45 @@ export type ProductionItem = {
   totalAmount: number;
   pkSize: number | null;
   pkUnit: string | null;
+  batch: "LSD" | "TomB";
 };
 
-export async function calculateProduction(date: Date): Promise<ProductionItem[]> {
-  const dayId = getDayId(date);
+export type ProductionResult = {
+  lsd: ProductionItem[];
+  tomb: ProductionItem[];
+  all: ProductionItem[]; // lsd + tomb merged by foodId, for consumers that don't need batch separation
+};
 
-  // Get all kid counts for this date (excluding closed schools)
-  const closedSchoolIds = (
-    await prisma.schoolClosing.findMany({
-      where: { startDate: { lte: date }, endDate: { gte: date } },
-      select: { schoolId: true },
-    })
-  ).map((c) => c.schoolId);
+/** On Thursday, production covers Fri + Sat + Sun delivery. All other days: just next day. */
+export function getDeliveryDatesForProductionDate(productionDate: Date): Date[] {
+  if (isThursday(productionDate)) {
+    return [
+      addDays(productionDate, 1),
+      addDays(productionDate, 2),
+      addDays(productionDate, 3),
+    ];
+  }
+  return [addDays(productionDate, 1)];
+}
+
+export async function calculateProduction(deliveryDate: Date): Promise<ProductionResult> {
+  const dayId = getDayId(deliveryDate);
+
+  const [closedSchoolIds, meals] = await Promise.all([
+    prisma.schoolClosing
+      .findMany({
+        where: { startDate: { lte: deliveryDate }, endDate: { gte: deliveryDate } },
+        select: { schoolId: true },
+      })
+      .then((r) => r.map((c) => c.schoolId)),
+    prisma.meal.findMany({ select: { id: true, name: true } }),
+  ]);
+
+  const mealNameMap = new Map(meals.map((m) => [m.id, m.name]));
 
   const kidCounts = await prisma.kidCount.findMany({
     where: {
-      date,
+      date: deliveryDate,
       schoolId: { notIn: closedSchoolIds.length > 0 ? closedSchoolIds : [-1] },
       count: { gt: 0 },
     },
@@ -32,25 +55,21 @@ export async function calculateProduction(date: Date): Promise<ProductionItem[]>
     },
   });
 
-  if (kidCounts.length === 0) return [];
+  if (kidCounts.length === 0) return { lsd: [], tomb: [], all: [] };
 
-  // For each kid count, find the menu items for that school/date/meal
-  const foodTotals = new Map<number, ProductionItem>();
+  const lsdTotals = new Map<number, ProductionItem>();
+  const tombTotals = new Map<number, ProductionItem>();
 
   for (const kc of kidCounts) {
     const menu = kc.schoolMenu.menu;
-    const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
+    const cycleWeek = getCycleWeek(deliveryDate, menu.effectiveDate, menu.cycleWeeks);
+    const mealName = mealNameMap.get(kc.mealId) ?? "";
+    const batch = getBatch(mealName, menu.delaySnack);
+    const totals = batch === "LSD" ? lsdTotals : tombTotals;
 
     const menuItems = await prisma.menuItem.findMany({
-      where: {
-        menuId: menu.id,
-        mealId: kc.mealId,
-        week: cycleWeek,
-        dayId,
-      },
-      include: {
-        foodItem: true,
-      },
+      where: { menuId: menu.id, mealId: kc.mealId, week: cycleWeek, dayId },
+      include: { foodItem: true },
     });
 
     for (const item of menuItems) {
@@ -63,29 +82,47 @@ export async function calculateProduction(date: Date): Promise<ProductionItem[]>
           },
         },
       });
-
       if (!servingSize) continue;
 
       const amount = kc.count * Number(servingSize.servingSize);
-      const existing = foodTotals.get(item.foodItemId);
-
+      const existing = totals.get(item.foodItemId);
       if (existing) {
         existing.totalAmount += amount;
       } else {
-        foodTotals.set(item.foodItemId, {
+        totals.set(item.foodItemId, {
           foodId: item.foodItemId,
           foodName: item.foodItem.name,
           tempType: item.foodItem.tempType,
           totalAmount: amount,
           pkSize: item.foodItem.pkSize,
           pkUnit: item.foodItem.pkUnit,
+          batch,
         });
       }
     }
   }
 
-  return Array.from(foodTotals.values()).sort((a, b) => {
-    if (a.tempType !== b.tempType) return a.tempType.localeCompare(b.tempType);
-    return a.foodName.localeCompare(b.foodName);
-  });
+  const sortItems = (items: ProductionItem[]) =>
+    items.sort((a, b) =>
+      a.tempType !== b.tempType
+        ? a.tempType.localeCompare(b.tempType)
+        : a.foodName.localeCompare(b.foodName)
+    );
+
+  const lsd = sortItems(Array.from(lsdTotals.values()));
+  const tomb = sortItems(Array.from(tombTotals.values()));
+
+  // Merge lsd + tomb by foodId; batch field is not meaningful in the merged list
+  const allMap = new Map<number, ProductionItem>();
+  for (const item of [...lsd, ...tomb]) {
+    const ex = allMap.get(item.foodId);
+    if (ex) {
+      ex.totalAmount += item.totalAmount;
+    } else {
+      allMap.set(item.foodId, { ...item });
+    }
+  }
+  const all = sortItems(Array.from(allMap.values()));
+
+  return { lsd, tomb, all };
 }

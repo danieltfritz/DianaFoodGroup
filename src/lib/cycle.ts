@@ -1,3 +1,29 @@
+export function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+export function subDays(date: Date, days: number): Date {
+  return addDays(date, -days);
+}
+
+export function isThursday(date: Date): boolean {
+  return date.getDay() === 4;
+}
+
+/**
+ * Returns which production batch a meal belongs to.
+ * LSD = Last Serving Day (today's truck: Lunch, Dinner, Snack unless delayed)
+ * TomB = Tomorrow Breakfast (next-morning delivery: Breakfast, Snack when delaySnack=true)
+ */
+export function getBatch(mealName: string, delaySnack: boolean): "LSD" | "TomB" {
+  const lower = mealName.toLowerCase();
+  if (lower === "breakfast") return "TomB";
+  if (lower === "snack") return delaySnack ? "TomB" : "LSD";
+  return "LSD";
+}
+
 /**
  * Returns the 1-based cycle week for a given date, given the menu's effective date and cycle length.
  * Weeks are counted from the Monday of the effectiveDate's week.

@@ -59,11 +59,9 @@ export function AppSidebar() {
           <SidebarMenu>
             {navItems.map((item) => (
               <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton asChild isActive={pathname === item.href}>
-                  <Link href={item.href}>
-                    <item.icon className="size-4" />
-                    <span>{item.title}</span>
-                  </Link>
+                <SidebarMenuButton render={<Link href={item.href} />} isActive={pathname === item.href}>
+                  <item.icon className="size-4" />
+                  <span>{item.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
@@ -75,11 +73,9 @@ export function AppSidebar() {
           <SidebarMenu>
             {adminItems.map((item) => (
               <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton asChild isActive={pathname === item.href}>
-                  <Link href={item.href}>
-                    <item.icon className="size-4" />
-                    <span>{item.title}</span>
-                  </Link>
+                <SidebarMenuButton render={<Link href={item.href} />} isActive={pathname === item.href}>
+                  <item.icon className="size-4" />
+                  <span>{item.title}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}

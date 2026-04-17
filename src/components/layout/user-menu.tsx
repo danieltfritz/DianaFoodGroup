@@ -24,8 +24,7 @@ export function UserMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent">
+      <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent">
           <Avatar className="size-8">
             <AvatarFallback className="text-xs">{initials}</AvatarFallback>
           </Avatar>
@@ -37,7 +36,6 @@ export function UserMenu() {
               </span>
             )}
           </div>
-        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuLabel>My Account</DropdownMenuLabel>

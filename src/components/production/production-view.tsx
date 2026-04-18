@@ -109,6 +109,39 @@ function BatchSection({
   );
 }
 
+function BoxSection({ items }: { items: ProductionItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Badge variant="outline">Box Menu</Badge>
+        <span className="text-xs text-muted-foreground">Pre-packed boxes — no container breakdown</span>
+        <span className="text-xs text-muted-foreground ml-auto">{items.length} items</span>
+      </div>
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Food Item</TableHead>
+              <TableHead className="text-right">Total Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item) => (
+              <TableRow key={item.foodId}>
+                <TableCell className="font-medium">{item.foodName}</TableCell>
+                <TableCell className="text-right">
+                  {item.totalAmount.toFixed(2)} {item.pkUnit ?? ""}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 function DayPanel({ result }: { result: ProductionResult }) {
   if (result.all.length === 0) {
     return (
@@ -121,6 +154,7 @@ function DayPanel({ result }: { result: ProductionResult }) {
     <div className="space-y-8">
       <BatchSection batch="LSD" items={result.lsd} />
       <BatchSection batch="TomB" items={result.tomb} />
+      <BoxSection items={result.box} />
     </div>
   );
 }

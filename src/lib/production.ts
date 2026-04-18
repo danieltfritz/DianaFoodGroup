@@ -12,12 +12,14 @@ export type ProductionItem = {
   pkUnit: string | null;
   batch: "LSD" | "TomB";
   packs: PackResult[];
+  isBox: boolean;
 };
 
 export type ProductionResult = {
   lsd: ProductionItem[];
   tomb: ProductionItem[];
-  all: ProductionItem[]; // lsd + tomb merged by foodId, for consumers that don't need batch separation
+  box: ProductionItem[];
+  all: ProductionItem[]; // lsd + tomb + box merged by foodId
 };
 
 type FoodAccumulator = {
@@ -30,6 +32,7 @@ type FoodAccumulator = {
   containerSizes: ContainerSizeInput[];
   containerStrategy: string;
   containerThreshold: number | null;
+  isBox: boolean;
 };
 
 /** On Thursday, production covers Fri + Sat + Sun delivery. All other days: just next day. */
@@ -52,7 +55,10 @@ function accToItem(acc: FoodAccumulator): ProductionItem {
     totalAmount: acc.totalAmount,
     pkUnit: acc.pkUnit,
     batch: acc.batch,
-    packs: packContainers(acc.totalAmount, acc.containerSizes, acc.containerStrategy, acc.containerThreshold),
+    isBox: acc.isBox,
+    packs: acc.isBox
+      ? []
+      : packContainers(acc.totalAmount, acc.containerSizes, acc.containerStrategy, acc.containerThreshold),
   };
 }
 
@@ -82,17 +88,19 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
     },
   });
 
-  if (kidCounts.length === 0) return { lsd: [], tomb: [], all: [] };
+  if (kidCounts.length === 0) return { lsd: [], tomb: [], box: [], all: [] };
 
   const lsdTotals = new Map<number, FoodAccumulator>();
   const tombTotals = new Map<number, FoodAccumulator>();
+  const boxTotals = new Map<number, FoodAccumulator>();
 
   for (const kc of kidCounts) {
     const menu = kc.schoolMenu.menu;
     const cycleWeek = getCycleWeek(deliveryDate, menu.effectiveDate, menu.cycleWeeks);
     const mealName = mealNameMap.get(kc.mealId) ?? "";
     const batch = getBatch(mealName, menu.delaySnack);
-    const totals = batch === "LSD" ? lsdTotals : tombTotals;
+    const isBox = menu.isBoxMenu;
+    const totals = isBox ? boxTotals : batch === "LSD" ? lsdTotals : tombTotals;
 
     const menuItems = await prisma.menuItem.findMany({
       where: { menuId: menu.id, mealId: kc.mealId, week: cycleWeek, dayId },
@@ -140,6 +148,7 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
           totalAmount: amount,
           pkUnit: item.foodItem.pkUnit,
           batch,
+          isBox,
           containerSizes,
           containerStrategy: item.foodItem.containerStrategy,
           containerThreshold: item.foodItem.containerThreshold
@@ -159,10 +168,11 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
 
   const lsd = sortItems(Array.from(lsdTotals.values()).map(accToItem));
   const tomb = sortItems(Array.from(tombTotals.values()).map(accToItem));
+  const box = sortItems(Array.from(boxTotals.values()).map(accToItem));
 
-  // Merge lsd + tomb by foodId for consumers needing the full undifferentiated list
+  // Merge lsd + tomb + box by foodId for consumers needing the full undifferentiated list
   const allMap = new Map<number, ProductionItem>();
-  for (const item of [...lsd, ...tomb]) {
+  for (const item of [...lsd, ...tomb, ...box]) {
     const ex = allMap.get(item.foodId);
     if (ex) {
       ex.totalAmount += item.totalAmount;
@@ -170,8 +180,9 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
       allMap.set(item.foodId, { ...item });
     }
   }
-  // Re-run packs on merged totals (amounts differ from individual batches)
+  // Re-run packs on merged totals for non-box items
   for (const item of allMap.values()) {
+    if (item.isBox) continue;
     const acc = lsdTotals.get(item.foodId) ?? tombTotals.get(item.foodId);
     if (acc) {
       item.packs = packContainers(
@@ -184,5 +195,5 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
   }
   const all = sortItems(Array.from(allMap.values()));
 
-  return { lsd, tomb, all };
+  return { lsd, tomb, box, all };
 }

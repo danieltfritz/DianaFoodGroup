@@ -25,6 +25,7 @@ export type DeliverySchool = {
   route: string | null;
   routeId: number | null;
   isClosed: boolean;
+  isBox: boolean;
   totalKids: number;
   lines: DeliveryFoodLine[];
 };
@@ -151,14 +152,13 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
       }
     }
 
+    const isBox = menu.isBoxMenu;
+
     const lines: DeliveryFoodLine[] = Array.from(lineMap.values())
       .map((acc) => {
-        const packs = packContainers(
-          acc.totalAmount,
-          acc.containerSizes,
-          acc.containerStrategy,
-          acc.containerThreshold
-        );
+        const packs = isBox
+          ? []
+          : packContainers(acc.totalAmount, acc.containerSizes, acc.containerStrategy, acc.containerThreshold);
         return {
           foodId: acc.foodId,
           foodName: acc.foodName,
@@ -168,12 +168,11 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
           totalAmount: acc.totalAmount,
           pkUnit: acc.pkUnit,
           packs,
-          packsLabel: formatPacks(packs),
+          packsLabel: isBox ? "—" : formatPacks(packs),
         };
       })
       .sort(
         (a, b) =>
-          a.batch.localeCompare(b.batch) ||
           a.mealName.localeCompare(b.mealName) ||
           a.foodName.localeCompare(b.foodName)
       );
@@ -187,6 +186,7 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
       route: school.route?.name ?? null,
       routeId: school.routeId,
       isClosed: closedIds.has(school.id),
+      isBox,
       totalKids,
       lines,
     });

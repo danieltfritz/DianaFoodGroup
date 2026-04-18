@@ -36,8 +36,10 @@ export default async function DeliveryTicketPage({
     day: "numeric",
   });
 
-  const lsdLines = data ? data.lines.filter((l) => l.batch === "LSD") : [];
-  const tombLines = data ? data.lines.filter((l) => l.batch === "TomB") : [];
+  const isBox = data?.isBox ?? false;
+  const lsdLines = data && !isBox ? data.lines.filter((l) => l.batch === "LSD") : [];
+  const tombLines = data && !isBox ? data.lines.filter((l) => l.batch === "TomB") : [];
+  const boxLines = data && isBox ? data.lines : [];
 
   const byMeal = (lines: typeof lsdLines) =>
     lines.reduce<Record<string, typeof lines>>((acc, line) => {
@@ -47,6 +49,7 @@ export default async function DeliveryTicketPage({
 
   const lsdByMeal = byMeal(lsdLines);
   const tombByMeal = byMeal(tombLines);
+  const boxByMeal = byMeal(boxLines);
 
   return (
     <div className="space-y-4">
@@ -93,14 +96,14 @@ export default async function DeliveryTicketPage({
           </p>
         ) : (
           <div className="space-y-8">
-            {/* LSD Section — today's delivery truck */}
-            {lsdLines.length > 0 && (
+            {isBox ? (
+              /* Box Menu — items packed into individual boxes, no container breakdown */
               <div>
                 <h3 className="font-bold text-base uppercase tracking-wide border-b pb-1 mb-4">
-                  LSD — Today&apos;s Delivery
+                  Box Menu
                 </h3>
                 <div className="space-y-5">
-                  {Object.entries(lsdByMeal).map(([mealName, lines]) => (
+                  {Object.entries(boxByMeal).map(([mealName, lines]) => (
                     <div key={mealName}>
                       <h4 className="font-semibold text-sm mb-2">{mealName}</h4>
                       <table className="w-full text-sm">
@@ -108,7 +111,6 @@ export default async function DeliveryTicketPage({
                           <tr className="text-left text-muted-foreground">
                             <th className="pb-1 font-medium">Food Item</th>
                             <th className="pb-1 font-medium text-right">Amount</th>
-                            <th className="pb-1 font-medium text-right">Packs</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -118,9 +120,6 @@ export default async function DeliveryTicketPage({
                               <td className="py-1.5 text-right">
                                 {line.totalAmount.toFixed(2)} {line.pkUnit ?? ""}
                               </td>
-                              <td className="py-1.5 text-right font-semibold">
-                                {line.packsLabel}
-                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -129,51 +128,93 @@ export default async function DeliveryTicketPage({
                   ))}
                 </div>
               </div>
-            )}
+            ) : (
+              <>
+                {/* LSD Section — today's delivery truck */}
+                {lsdLines.length > 0 && (
+                  <div>
+                    <h3 className="font-bold text-base uppercase tracking-wide border-b pb-1 mb-4">
+                      LSD — Today&apos;s Delivery
+                    </h3>
+                    <div className="space-y-5">
+                      {Object.entries(lsdByMeal).map(([mealName, lines]) => (
+                        <div key={mealName}>
+                          <h4 className="font-semibold text-sm mb-2">{mealName}</h4>
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left text-muted-foreground">
+                                <th className="pb-1 font-medium">Food Item</th>
+                                <th className="pb-1 font-medium text-right">Amount</th>
+                                <th className="pb-1 font-medium text-right">Packs</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lines.map((line) => (
+                                <tr key={`${line.foodId}-${line.mealId}`} className="border-t">
+                                  <td className="py-1.5">{line.foodName}</td>
+                                  <td className="py-1.5 text-right">
+                                    {line.totalAmount.toFixed(2)} {line.pkUnit ?? ""}
+                                  </td>
+                                  <td className="py-1.5 text-right font-semibold">
+                                    {line.packsLabel}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-            {/* TomB Section — tomorrow's breakfast cooler */}
-            {tombLines.length > 0 && (
-              <div>
-                <h3 className="font-bold text-base uppercase tracking-wide border-b pb-1 mb-4">
-                  TomB — Tomorrow&apos;s Breakfast
-                </h3>
-                <div className="space-y-5">
-                  {Object.entries(tombByMeal).map(([mealName, lines]) => (
-                    <div key={mealName}>
-                      <h4 className="font-semibold text-sm mb-2">{mealName}</h4>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-muted-foreground">
-                            <th className="pb-1 font-medium">Food Item</th>
-                            <th className="pb-1 font-medium text-right">Amount</th>
-                            <th className="pb-1 font-medium text-right">Packs</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {lines.map((line) => (
-                            <tr key={`${line.foodId}-${line.mealId}`} className="border-t">
-                              <td className="py-1.5">{line.foodName}</td>
-                              <td className="py-1.5 text-right">
-                                {line.totalAmount.toFixed(2)} {line.pkUnit ?? ""}
-                              </td>
-                              <td className="py-1.5 text-right font-semibold">
-                                {line.packsLabel}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                {/* TomB Section — tomorrow's breakfast cooler */}
+                {tombLines.length > 0 && (
+                  <div>
+                    <h3 className="font-bold text-base uppercase tracking-wide border-b pb-1 mb-4">
+                      TomB — Tomorrow&apos;s Breakfast
+                    </h3>
+                    <div className="space-y-5">
+                      {Object.entries(tombByMeal).map(([mealName, lines]) => (
+                        <div key={mealName}>
+                          <h4 className="font-semibold text-sm mb-2">{mealName}</h4>
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left text-muted-foreground">
+                                <th className="pb-1 font-medium">Food Item</th>
+                                <th className="pb-1 font-medium text-right">Amount</th>
+                                <th className="pb-1 font-medium text-right">Packs</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lines.map((line) => (
+                                <tr key={`${line.foodId}-${line.mealId}`} className="border-t">
+                                  <td className="py-1.5">{line.foodName}</td>
+                                  <td className="py-1.5 text-right">
+                                    {line.totalAmount.toFixed(2)} {line.pkUnit ?? ""}
+                                  </td>
+                                  <td className="py-1.5 text-right font-semibold">
+                                    {line.packsLabel}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="border-t pt-4 flex justify-between text-sm font-semibold">
               <span>Total Kids: {data.totalKids}</span>
-              <span>
-                LSD: {lsdLines.length} items · TomB: {tombLines.length} items
-              </span>
+              {isBox ? (
+                <span>Box Menu · {boxLines.length} items</span>
+              ) : (
+                <span>LSD: {lsdLines.length} items · TomB: {tombLines.length} items</span>
+              )}
             </div>
           </div>
         )}

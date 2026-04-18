@@ -246,7 +246,7 @@ model MealPrice {
   schoolId     Int
   mealId       Int
   ageGroupId   Int
-  price        Decimal    @db.Decimal(10, 2)
+  price        Decimal    @db.Decimal(10, 4)
   schoolMenu   SchoolMenu @relation(fields: [schoolMenuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   school       School     @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   meal         Meal       @relation(fields: [mealId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -280,7 +280,7 @@ model BillingRunDetail {
   ageGroupId   Int
   isBox        Boolean    @default(false)
   kidCount     Int
-  priceUsed    Decimal    @db.Decimal(10, 2)
+  priceUsed    Decimal    @db.Decimal(10, 4)
   billingRun   BillingRun @relation(fields: [billingRunId], references: [id])
 }
 

@@ -112,7 +112,7 @@ export default async function BillingRunPage({ params }: { params: { runId: stri
                     <TableCell>{mealMap[d.mealId] ?? d.mealId}</TableCell>
                     <TableCell>{ageMap[d.ageGroupId] ?? d.ageGroupId}</TableCell>
                     <TableCell className="text-right">{d.kidCount}</TableCell>
-                    <TableCell className="text-right">${Number(d.priceUsed).toFixed(2)}</TableCell>
+                    <TableCell className="text-right">${Number(d.priceUsed).toFixed(4)}</TableCell>
                     <TableCell className="text-right font-medium">
                       ${(d.kidCount * Number(d.priceUsed)).toFixed(2)}
                     </TableCell>

@@ -32,7 +32,7 @@ export function MealPricesTab({
     const init: Record<string, string> = {};
     schoolRows.forEach((s) => {
       Object.entries(s.prices).forEach(([key, price]) => {
-        init[`${s.schoolId}-${key}`] = price.toFixed(2);
+        init[`${s.schoolId}-${key}`] = price.toFixed(4);
       });
     });
     return init;
@@ -122,9 +122,9 @@ export function MealPricesTab({
                           <Input
                             type="number"
                             min={0}
-                            step={0.01}
-                            className="h-7 w-20 text-right text-sm pl-5 mx-auto"
-                            value={values[key] ?? "0.00"}
+                            step={0.0001}
+                            className="h-7 w-24 text-right text-sm pl-5 mx-auto"
+                            value={values[key] ?? "0.0000"}
                             onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
                             onBlur={() => handleBlur(school, meal.id, ag.id)}
                           />

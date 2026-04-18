@@ -68,7 +68,7 @@ export async function GET(
         `"${mealMap[d.mealId] ?? d.mealId}"`,
         `"${ageMap[d.ageGroupId] ?? d.ageGroupId}"`,
         d.kidCount,
-        Number(d.priceUsed).toFixed(2),
+        Number(d.priceUsed).toFixed(4),
         total,
       ].join(",")
     );

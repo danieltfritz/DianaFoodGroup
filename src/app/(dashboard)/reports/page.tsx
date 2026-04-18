@@ -43,6 +43,9 @@ export default async function ReportsPage({
           <Button variant="outline" size="sm" render={<Link href="/reports/fruit" />}>
             Fruit Report
           </Button>
+          <Button variant="outline" size="sm" render={<Link href={`/reports/walkthrough?date=${dateStr}`} />}>
+            Walk-Through
+          </Button>
           <DateNav date={dateStr} />
         </div>
       </div>

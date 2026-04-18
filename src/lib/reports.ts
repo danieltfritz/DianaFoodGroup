@@ -318,6 +318,111 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
     .sort((a, b) => (a.route ?? "zzz").localeCompare(b.route ?? "zzz") || a.schoolName.localeCompare(b.schoolName));
 }
 
+// ─── Fruit Report ────────────────────────────────────────────────────────────
+
+export type FruitItem = {
+  foodName: string;
+  totalAmount: number;
+  pkUnit: string | null;
+};
+
+export type FruitReportRow = {
+  date: Date;
+  schoolName: string;
+  route: string | null;
+  items: FruitItem[];
+};
+
+export async function getFruitReport(startDate: Date, endDate: Date): Promise<FruitReportRow[]> {
+  // Identify fruit food type IDs
+  const fruitTypes = await prisma.foodType.findMany({
+    where: { name: { contains: "fruit" } },
+    select: { id: true },
+  });
+  if (fruitTypes.length === 0) return [];
+  const fruitTypeIds = fruitTypes.map((t) => t.id);
+
+  const kidCounts = await prisma.kidCount.findMany({
+    where: { date: { gte: startDate, lte: endDate }, count: { gt: 0 } },
+    include: {
+      school: { include: { route: true } },
+      schoolMenu: { include: { menu: true } },
+    },
+    orderBy: [{ date: "asc" }, { school: { name: "asc" } }],
+  });
+
+  if (kidCounts.length === 0) return [];
+
+  // Key: date-ISO + schoolId
+  type RowAcc = {
+    date: Date;
+    schoolName: string;
+    route: string | null;
+    items: Map<number, FruitItem>;
+  };
+  const rowMap = new Map<string, RowAcc>();
+
+  for (const kc of kidCounts) {
+    const menu = kc.schoolMenu.menu;
+    const dayId = getDayId(kc.date);
+    const cycleWeek = getCycleWeek(kc.date, menu.effectiveDate, menu.cycleWeeks);
+
+    const fruitMenuItems = await prisma.menuItem.findMany({
+      where: {
+        menuId: menu.id,
+        mealId: kc.mealId,
+        week: cycleWeek,
+        dayId,
+        foodItem: { foodTypeId: { in: fruitTypeIds } },
+      },
+      include: { foodItem: true },
+    });
+
+    if (fruitMenuItems.length === 0) continue;
+
+    const key = `${kc.date.toISOString().split("T")[0]}-${kc.schoolId}`;
+    let row = rowMap.get(key);
+    if (!row) {
+      row = {
+        date: kc.date,
+        schoolName: kc.school.name,
+        route: kc.school.route?.name ?? null,
+        items: new Map(),
+      };
+      rowMap.set(key, row);
+    }
+
+    for (const mi of fruitMenuItems) {
+      const ss = await prisma.servingSize.findUnique({
+        where: {
+          mealId_foodItemId_ageGroupId: {
+            mealId: kc.mealId,
+            foodItemId: mi.foodItemId,
+            ageGroupId: kc.ageGroupId,
+          },
+        },
+      });
+      if (!ss) continue;
+
+      const amount = kc.count * Number(ss.servingSize);
+      const existing = row.items.get(mi.foodItemId);
+      if (existing) {
+        existing.totalAmount += amount;
+      } else {
+        row.items.set(mi.foodItemId, {
+          foodName: mi.foodItem.name,
+          totalAmount: amount,
+          pkUnit: mi.foodItem.pkUnit,
+        });
+      }
+    }
+  }
+
+  return Array.from(rowMap.values())
+    .filter((r) => r.items.size > 0)
+    .map((r) => ({ ...r, items: Array.from(r.items.values()) }));
+}
+
 // ─── Item Report ──────────────────────────────────────────────────────────────
 
 export type ItemReportRow = {

@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DateNav } from "@/components/kid-counts/date-nav";
+import { Button } from "@/components/ui/button";
 import { FoodAuditReport } from "@/components/reports/food-audit-report";
 import { SchoolSummaryReport } from "@/components/reports/school-summary-report";
 import { ContainerCountReport } from "@/components/reports/container-count-report";
@@ -37,7 +39,12 @@ export default async function ReportsPage({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Reports</h1>
-        <DateNav date={dateStr} />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" render={<Link href="/reports/fruit" />}>
+            Fruit Report
+          </Button>
+          <DateNav date={dateStr} />
+        </div>
       </div>
 
       <Tabs defaultValue={activeTab}>

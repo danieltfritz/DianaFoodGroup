@@ -23,16 +23,23 @@ export default async function LabelsPage({ searchParams }: { searchParams: { dat
 
   // Build label list: one label per school × meal × food item
   const labels = schools.flatMap((school) =>
-    school.lines.map((line) => ({
-      school: school.schoolName,
-      route: school.route ?? "",
-      date: dateShort,
-      weekday: dayName,
-      meal: line.mealName,
-      foodItem: line.foodName,
-      amount: `${line.totalAmount.toFixed(2)}${line.pkUnit ? ` ${line.pkUnit}` : ""}`,
-      packs: line.packsLabel,
-    }))
+    school.lines.map((line) => {
+      const servings =
+        line.servingSizeOz && line.servingSizeOz > 0
+          ? `${Math.round(line.totalAmount / line.servingSizeOz)} - ${line.servingSizeOz} oz servings`
+          : null;
+      return {
+        school: school.schoolName,
+        route: school.route ?? "",
+        date: dateShort,
+        weekday: dayName,
+        meal: line.mealName,
+        foodItem: line.foodName,
+        amount: `${line.totalAmount.toFixed(2)}${line.pkUnit ? ` ${line.pkUnit}` : ""}`,
+        packs: line.packsLabel,
+        servings,
+      };
+    })
   );
 
   return (
@@ -73,6 +80,9 @@ export default async function LabelsPage({ searchParams }: { searchParams: { dat
                   <span>Containers: <strong>{label.packs}</strong></span>
                 )}
               </div>
+              {label.servings && (
+                <div className="text-muted-foreground">{label.servings}</div>
+              )}
             </div>
           ))}
         </div>

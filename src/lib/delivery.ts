@@ -12,6 +12,7 @@ export type DeliveryFoodLine = {
   batch: "LSD" | "TomB";
   totalAmount: number;
   pkUnit: string | null;
+  servingSizeOz: number | null;
   packs: PackResult[];
   packsLabel: string;
 };
@@ -95,6 +96,7 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
       batch: "LSD" | "TomB";
       totalAmount: number;
       pkUnit: string | null;
+      servingSizeOz: number | null;
       containerSizes: ContainerSizeInput[];
       containerStrategy: string;
       containerThreshold: number | null;
@@ -135,6 +137,23 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
             size: Number(s.size),
           })) ?? [];
 
+        // Use first serving size found as representative for label display
+        const firstSs = await (async () => {
+          for (const kc of mealCounts) {
+            const s = await prisma.servingSize.findUnique({
+              where: {
+                mealId_foodItemId_ageGroupId: {
+                  mealId: mi.mealId,
+                  foodItemId: mi.foodItemId,
+                  ageGroupId: kc.ageGroupId,
+                },
+              },
+            });
+            if (s) return Number(s.servingSize);
+          }
+          return null;
+        })();
+
         lineMap.set(key, {
           foodId: mi.foodItemId,
           foodName: mi.foodItem.name,
@@ -143,6 +162,7 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
           batch: getBatch(mi.meal.name, menu.delaySnack),
           totalAmount,
           pkUnit: mi.foodItem.pkUnit,
+          servingSizeOz: firstSs,
           containerSizes,
           containerStrategy: mi.foodItem.containerStrategy,
           containerThreshold: mi.foodItem.containerThreshold
@@ -167,6 +187,7 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
           batch: acc.batch,
           totalAmount: acc.totalAmount,
           pkUnit: acc.pkUnit,
+          servingSizeOz: acc.servingSizeOz,
           packs,
           packsLabel: isBox ? "—" : formatPacks(packs),
         };

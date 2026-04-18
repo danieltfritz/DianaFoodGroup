@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { generateIIF } from "@/lib/billing-iif";
 
 export async function GET(
   req: NextRequest,
@@ -10,16 +11,11 @@ export async function GET(
   if (!session) return new NextResponse("Unauthorized", { status: 401 });
 
   const { runId: runIdStr } = await params;
+  const format = req.nextUrl.searchParams.get("format");
   const runId = Number(runIdStr);
   const run = await prisma.billingRun.findUnique({
     where: { id: runId },
-    include: {
-      details: {
-        include: {
-          billingRun: true,
-        },
-      },
-    },
+    include: { details: true },
   });
 
   if (!run) return new NextResponse("Not found", { status: 404 });
@@ -36,6 +32,27 @@ export async function GET(
   const ageMap = Object.fromEntries(ageGroups.map((a) => [a.id, a.name]));
 
   const dateStr = new Date(run.deliveryDate).toLocaleDateString("en-US");
+
+  // IIF export
+  if (format === "iif") {
+    const qbCodes = await prisma.qbMealCode.findMany();
+    const details = run.details.map((d) => ({
+      schoolId: d.schoolId,
+      schoolName: schoolMap[d.schoolId] ?? String(d.schoolId),
+      mealId: d.mealId,
+      ageGroupId: d.ageGroupId,
+      kidCount: d.kidCount,
+      priceUsed: Number(d.priceUsed),
+    }));
+    const iif = generateIIF(run, details, qbCodes);
+    const iifFilename = `billing-${run.deliveryDate.toISOString().split("T")[0]}.iif`;
+    return new NextResponse(iif, {
+      headers: {
+        "Content-Type": "text/plain",
+        "Content-Disposition": `attachment; filename="${iifFilename}"`,
+      },
+    });
+  }
 
   // CSV header
   const rows = [

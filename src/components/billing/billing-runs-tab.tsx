@@ -87,6 +87,13 @@ export function BillingRunsTab({ runs }: { runs: BillingRun[] }) {
                         <Download className="mr-1 size-3" />CSV
                       </Button>
                       <Button
+                        size="sm"
+                        variant="outline"
+                        render={<a href={`/api/billing/${r.id}/export?format=iif`} download />}
+                      >
+                        <Download className="mr-1 size-3" />IIF
+                      </Button>
+                      <Button
                         size="icon"
                         variant="ghost"
                         className="h-7 w-7"

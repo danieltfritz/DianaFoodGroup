@@ -4,8 +4,10 @@ import { FoodAuditReport } from "@/components/reports/food-audit-report";
 import { SchoolSummaryReport } from "@/components/reports/school-summary-report";
 import { ContainerCountReport } from "@/components/reports/container-count-report";
 import { MilkReport } from "@/components/reports/milk-report";
+import { ItemReport } from "@/components/reports/item-report";
+import { ProductionSummaryReport } from "@/components/reports/production-summary-report";
 import { calculateProduction } from "@/lib/production";
-import { getSchoolSummary, getContainerReport, getMilkReport } from "@/lib/reports";
+import { getSchoolSummary, getContainerReport, getMilkReport, getItemReport, getProductionSummary } from "@/lib/reports";
 
 export default async function ReportsPage({
   searchParams,
@@ -19,11 +21,13 @@ export default async function ReportsPage({
   const dateStr = dateParam ?? today.toISOString().split("T")[0];
   const date = new Date(dateStr);
 
-  const [productionResult, schoolSummary, containerReport, milkReport] = await Promise.all([
+  const [productionResult, schoolSummary, containerReport, milkReport, itemReport, productionSummary] = await Promise.all([
     calculateProduction(date),
     getSchoolSummary(date),
     getContainerReport(date),
     getMilkReport(date),
+    getItemReport(date),
+    getProductionSummary(date),
   ]);
   const productionItems = productionResult.all;
 
@@ -42,6 +46,8 @@ export default async function ReportsPage({
           <TabsTrigger value="food-audit">Food Audit</TabsTrigger>
           <TabsTrigger value="containers">Container Count</TabsTrigger>
           <TabsTrigger value="milk">Milk Report</TabsTrigger>
+          <TabsTrigger value="item-report">Item Report</TabsTrigger>
+          <TabsTrigger value="prod-summary">Prod Summary</TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary" className="mt-4">
@@ -58,6 +64,14 @@ export default async function ReportsPage({
 
         <TabsContent value="milk" className="mt-4">
           <MilkReport rows={milkReport} />
+        </TabsContent>
+
+        <TabsContent value="item-report" className="mt-4">
+          <ItemReport sections={itemReport} />
+        </TabsContent>
+
+        <TabsContent value="prod-summary" className="mt-4">
+          <ProductionSummaryReport sections={productionSummary} />
         </TabsContent>
       </Tabs>
     </div>

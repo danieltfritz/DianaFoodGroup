@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getCycleWeek, getDayId } from "@/lib/cycle";
+import { packContainers, type PackResult, type ContainerSizeInput } from "@/lib/containers";
 
 // ─── School Summary ───────────────────────────────────────────────────────────
 
@@ -315,4 +316,282 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
       return { schoolId, schoolName, route, milkTier, overagePct, items: milkItems };
     })
     .sort((a, b) => (a.route ?? "zzz").localeCompare(b.route ?? "zzz") || a.schoolName.localeCompare(b.schoolName));
+}
+
+// ─── Item Report ──────────────────────────────────────────────────────────────
+
+export type ItemReportRow = {
+  schoolName: string;
+  totalAmount: number;
+  packs: PackResult[];
+};
+
+export type ItemReportSection = {
+  foodId: number;
+  foodName: string;
+  pkUnit: string | null;
+  tempType: string;
+  rows: ItemReportRow[];
+  grandTotal: number;
+};
+
+export async function getItemReport(deliveryDate: Date): Promise<ItemReportSection[]> {
+  const date = deliveryDate;
+  const dayId = getDayId(date);
+
+  const closedIds = (
+    await prisma.schoolClosing.findMany({
+      where: { startDate: { lte: date }, endDate: { gte: date } },
+      select: { schoolId: true },
+    })
+  ).map((c) => c.schoolId);
+
+  const kidCounts = await prisma.kidCount.findMany({
+    where: {
+      date,
+      schoolId: { notIn: closedIds.length > 0 ? closedIds : [-1] },
+      count: { gt: 0 },
+    },
+    include: {
+      school: true,
+      schoolMenu: { include: { menu: true } },
+    },
+  });
+
+  if (kidCounts.length === 0) return [];
+
+  type FoodSchoolAcc = { schoolName: string; totalAmount: number };
+  type FoodAcc = {
+    foodId: number;
+    foodName: string;
+    tempType: string;
+    pkUnit: string | null;
+    containerSizes: ContainerSizeInput[];
+    containerStrategy: string;
+    containerThreshold: number | null;
+    schools: Map<number, FoodSchoolAcc>;
+  };
+
+  const foodMap = new Map<number, FoodAcc>();
+
+  for (const kc of kidCounts) {
+    const menu = kc.schoolMenu.menu;
+    const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: { menuId: menu.id, mealId: kc.mealId, week: cycleWeek, dayId },
+      include: {
+        foodItem: {
+          include: {
+            container: { include: { sizes: { orderBy: { size: "desc" } } } },
+          },
+        },
+      },
+    });
+
+    for (const mi of menuItems) {
+      const ss = await prisma.servingSize.findUnique({
+        where: {
+          mealId_foodItemId_ageGroupId: {
+            mealId: kc.mealId,
+            foodItemId: mi.foodItemId,
+            ageGroupId: kc.ageGroupId,
+          },
+        },
+      });
+      if (!ss) continue;
+
+      const amount = kc.count * Number(ss.servingSize);
+
+      let foodAcc = foodMap.get(mi.foodItemId);
+      if (!foodAcc) {
+        const containerSizes: ContainerSizeInput[] =
+          mi.foodItem.container?.sizes.map((s) => ({
+            id: s.id,
+            name: s.name,
+            abbreviation: s.abbreviation,
+            size: Number(s.size),
+          })) ?? [];
+
+        foodAcc = {
+          foodId: mi.foodItemId,
+          foodName: mi.foodItem.name,
+          tempType: mi.foodItem.tempType,
+          pkUnit: mi.foodItem.pkUnit,
+          containerSizes,
+          containerStrategy: mi.foodItem.containerStrategy,
+          containerThreshold: mi.foodItem.containerThreshold
+            ? Number(mi.foodItem.containerThreshold)
+            : null,
+          schools: new Map(),
+        };
+        foodMap.set(mi.foodItemId, foodAcc);
+      }
+
+      const schoolAcc = foodAcc.schools.get(kc.schoolId);
+      if (schoolAcc) {
+        schoolAcc.totalAmount += amount;
+      } else {
+        foodAcc.schools.set(kc.schoolId, { schoolName: kc.school.name, totalAmount: amount });
+      }
+    }
+  }
+
+  return Array.from(foodMap.values())
+    .map((fa) => {
+      const rows: ItemReportRow[] = Array.from(fa.schools.values())
+        .sort((a, b) => a.schoolName.localeCompare(b.schoolName))
+        .map((s) => ({
+          schoolName: s.schoolName,
+          totalAmount: s.totalAmount,
+          packs: packContainers(s.totalAmount, fa.containerSizes, fa.containerStrategy, fa.containerThreshold),
+        }));
+
+      return {
+        foodId: fa.foodId,
+        foodName: fa.foodName,
+        pkUnit: fa.pkUnit,
+        tempType: fa.tempType,
+        rows,
+        grandTotal: rows.reduce((sum, r) => sum + r.totalAmount, 0),
+      };
+    })
+    .sort((a, b) => a.tempType.localeCompare(b.tempType) || a.foodName.localeCompare(b.foodName));
+}
+
+// ─── Production Summary Report ────────────────────────────────────────────────
+
+export type SummarySchoolRow = {
+  schoolName: string;
+  quantities: Record<number, number>; // foodItemId → total amount
+};
+
+export type SummaryRouteGroup = {
+  routeId: number | null;
+  routeName: string;
+  schools: SummarySchoolRow[];
+  totals: Record<number, number>;
+};
+
+export type ProductionSummarySection = {
+  menuId: number;
+  menuName: string;
+  foodItems: { foodId: number; foodName: string; pkUnit: string | null; tempType: string }[];
+  routes: SummaryRouteGroup[];
+};
+
+export async function getProductionSummary(deliveryDate: Date): Promise<ProductionSummarySection[]> {
+  const date = deliveryDate;
+  const dayId = getDayId(date);
+
+  const closedIds = (
+    await prisma.schoolClosing.findMany({
+      where: { startDate: { lte: date }, endDate: { gte: date } },
+      select: { schoolId: true },
+    })
+  ).map((c) => c.schoolId);
+
+  const kidCounts = await prisma.kidCount.findMany({
+    where: {
+      date,
+      schoolId: { notIn: closedIds.length > 0 ? closedIds : [-1] },
+      count: { gt: 0 },
+    },
+    include: {
+      school: { include: { route: true } },
+      schoolMenu: { include: { menu: true } },
+    },
+  });
+
+  if (kidCounts.length === 0) return [];
+
+  type RouteSchoolAcc = { schoolName: string; quantities: Map<number, number> };
+  type RouteAcc = { routeName: string; schools: Map<number, RouteSchoolAcc> };
+  type MenuAcc = {
+    menuName: string;
+    foodItems: Map<number, { foodId: number; foodName: string; pkUnit: string | null; tempType: string }>;
+    routes: Map<number | null, RouteAcc>;
+  };
+
+  const menuMap = new Map<number, MenuAcc>();
+
+  for (const kc of kidCounts) {
+    const menu = kc.schoolMenu.menu;
+    const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
+
+    let menuAcc = menuMap.get(menu.id);
+    if (!menuAcc) {
+      menuAcc = { menuName: menu.name, foodItems: new Map(), routes: new Map() };
+      menuMap.set(menu.id, menuAcc);
+    }
+
+    const routeId = kc.school.routeId;
+    const routeName = kc.school.route?.name ?? "No Route";
+
+    let routeGroup = menuAcc.routes.get(routeId);
+    if (!routeGroup) {
+      routeGroup = { routeName, schools: new Map() };
+      menuAcc.routes.set(routeId, routeGroup);
+    }
+
+    let schoolAcc = routeGroup.schools.get(kc.schoolId);
+    if (!schoolAcc) {
+      schoolAcc = { schoolName: kc.school.name, quantities: new Map() };
+      routeGroup.schools.set(kc.schoolId, schoolAcc);
+    }
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: { menuId: menu.id, mealId: kc.mealId, week: cycleWeek, dayId },
+      include: { foodItem: true },
+    });
+
+    for (const mi of menuItems) {
+      const ss = await prisma.servingSize.findUnique({
+        where: {
+          mealId_foodItemId_ageGroupId: {
+            mealId: kc.mealId,
+            foodItemId: mi.foodItemId,
+            ageGroupId: kc.ageGroupId,
+          },
+        },
+      });
+      if (!ss) continue;
+
+      const amount = kc.count * Number(ss.servingSize);
+      menuAcc.foodItems.set(mi.foodItemId, {
+        foodId: mi.foodItemId,
+        foodName: mi.foodItem.name,
+        pkUnit: mi.foodItem.pkUnit,
+        tempType: mi.foodItem.tempType,
+      });
+      schoolAcc.quantities.set(mi.foodItemId, (schoolAcc.quantities.get(mi.foodItemId) ?? 0) + amount);
+    }
+  }
+
+  return Array.from(menuMap.entries())
+    .sort(([, a], [, b]) => a.menuName.localeCompare(b.menuName))
+    .map(([menuId, acc]) => {
+      const foodItems = Array.from(acc.foodItems.values()).sort(
+        (a, b) => a.tempType.localeCompare(b.tempType) || a.foodName.localeCompare(b.foodName)
+      );
+
+      const routes: SummaryRouteGroup[] = Array.from(acc.routes.entries())
+        .sort(([, a], [, b]) => a.routeName.localeCompare(b.routeName))
+        .map(([routeId, rg]) => {
+          const schools: SummarySchoolRow[] = Array.from(rg.schools.values())
+            .sort((a, b) => a.schoolName.localeCompare(b.schoolName))
+            .map((s) => ({ schoolName: s.schoolName, quantities: Object.fromEntries(s.quantities) }));
+
+          const totals: Record<number, number> = {};
+          for (const s of schools) {
+            for (const [fid, qty] of Object.entries(s.quantities)) {
+              totals[Number(fid)] = (totals[Number(fid)] ?? 0) + qty;
+            }
+          }
+
+          return { routeId, routeName: rg.routeName, schools, totals };
+        });
+
+      return { menuId, menuName: acc.menuName, foodItems, routes };
+    });
 }

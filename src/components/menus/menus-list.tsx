@@ -80,7 +80,9 @@ export function MenusList({ menus }: { menus: Menu[] }) {
             )}
             {menus.map((m) => (
               <TableRow key={m.id}>
-                <TableCell className="font-medium">{m.name}</TableCell>
+                <TableCell className="font-medium">
+                  <Link href={`/menus/${m.id}`} className="hover:underline">{m.name}</Link>
+                </TableCell>
                 <TableCell>{m.cycleWeeks}w</TableCell>
                 <TableCell>{new Date(m.effectiveDate).toLocaleDateString()}</TableCell>
                 <TableCell>{m.isBoxMenu ? <Badge>Box</Badge> : "—"}</TableCell>
@@ -88,7 +90,7 @@ export function MenusList({ menus }: { menus: Menu[] }) {
                 <TableCell>{m._count.schoolMenus}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" render={<Link href={`/menus/${m.id}`} />}>
+                    <Button size="icon" variant="ghost" nativeButton={false} render={<Link href={`/menus/${m.id}`} />}>
                       <ChevronRight className="size-4" />
                     </Button>
                     <Button size="icon" variant="ghost" onClick={() => openEdit(m)}><Pencil className="size-4" /></Button>

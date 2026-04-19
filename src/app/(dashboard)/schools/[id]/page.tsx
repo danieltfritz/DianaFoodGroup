@@ -7,12 +7,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SchoolMenusTab } from "@/components/schools/school-menus-tab";
 import { SchoolClosingsTab } from "@/components/schools/school-closings-tab";
 
-export default async function SchoolDetailPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export default async function SchoolDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: idParam } = await params;
+  const id = Number(idParam);
   if (isNaN(id)) notFound();
 
   const [school, menus, schoolMenus, closings] = await Promise.all([
-    prisma.school.findUnique({ where: { id }, include: { route: true, county: true } }),
+    prisma.school.findUnique({
+      where: { id },
+      include: { route: true, county: true, billingGroups: { include: { billingGroup: true } } },
+    }),
     prisma.menu.findMany({ orderBy: { name: "asc" } }),
     prisma.schoolMenu.findMany({
       where: { schoolId: id },
@@ -30,7 +34,7 @@ export default async function SchoolDetailPage({ params }: { params: { id: strin
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" render={<Link href="/schools" />}>
+        <Button variant="ghost" size="icon" nativeButton={false} render={<Link href="/schools" />}>
           <ChevronLeft className="size-4" />
         </Button>
         <div>
@@ -38,6 +42,7 @@ export default async function SchoolDetailPage({ params }: { params: { id: strin
           <p className="text-sm text-muted-foreground">
             {[school.city, school.state].filter(Boolean).join(", ")}
             {school.route && ` · Route: ${school.route.name}`}
+            {school.billingGroups.length > 0 && ` · ${school.billingGroups.map((bg) => bg.billingGroup.name).join(", ")}`}
           </p>
         </div>
       </div>

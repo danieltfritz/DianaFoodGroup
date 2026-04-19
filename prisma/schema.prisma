@@ -95,6 +95,7 @@ model School {
   mealPrices     MealPrice[]
   schoolClosings SchoolClosing[]
   billingGroups  BillingSchoolGroup[]
+  milkCounts     MilkCount[]
 }
 
 // ─── Food Catalog ─────────────────────────────────────────────────────────────
@@ -204,21 +205,42 @@ model SchoolClosing {
 // ─── Core Fact Table ──────────────────────────────────────────────────────────
 
 model KidCount {
-  id           Int        @id @default(autoincrement())
+  id           Int         @id @default(autoincrement())
   schoolId     Int
   schoolMenuId Int
-  date         DateTime   @db.Date
+  date         DateTime    @db.Date
   mealId       Int
   ageGroupId   Int
   count        Int
-  updatedAt    DateTime   @updatedAt
-  school       School     @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  schoolMenu   SchoolMenu @relation(fields: [schoolMenuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  meal         Meal       @relation(fields: [mealId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  ageGroup     AgeGroup   @relation(fields: [ageGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  updatedAt    DateTime    @updatedAt
+  school       School      @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schoolMenu   SchoolMenu  @relation(fields: [schoolMenuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  meal         Meal        @relation(fields: [mealId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ageGroup     AgeGroup    @relation(fields: [ageGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([schoolId, date, mealId, ageGroupId])
   @@index([date])
+  @@index([schoolId, date])
+}
+
+model MilkType {
+  id         Int         @id
+  name       String      @db.VarChar(50)
+  labelColor String      @db.VarChar(50)
+  milkCounts MilkCount[]
+}
+
+model MilkCount {
+  id         Int      @id @default(autoincrement())
+  schoolId   Int
+  date       DateTime @db.Date
+  mealId     Int
+  milkTypeId Int
+  count      Int      @default(0)
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  milkType   MilkType @relation(fields: [milkTypeId], references: [id])
+
+  @@unique([schoolId, date, mealId, milkTypeId])
   @@index([schoolId, date])
 }
 

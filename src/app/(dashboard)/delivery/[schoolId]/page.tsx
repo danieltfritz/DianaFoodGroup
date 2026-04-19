@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getDeliveryData } from "@/lib/delivery";
+import { parseLocalDate } from "@/lib/cycle";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
 import { PrintButton } from "@/components/delivery/print-button";
@@ -10,16 +11,17 @@ export default async function DeliveryTicketPage({
   params,
   searchParams,
 }: {
-  params: { schoolId: string };
-  searchParams: { date?: string };
+  params: Promise<{ schoolId: string }>;
+  searchParams: Promise<{ date?: string }>;
 }) {
-  const schoolId = Number(params.schoolId);
+  const [{ schoolId: schoolIdParam }, { date: dateParam }] = await Promise.all([params, searchParams]);
+  const schoolId = Number(schoolIdParam);
   if (isNaN(schoolId)) notFound();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dateStr = searchParams.date ?? today.toISOString().split("T")[0];
-  const date = new Date(dateStr);
+  const dateStr = dateParam ?? today.toISOString().split("T")[0];
+  const date = parseLocalDate(dateStr);
 
   const [allDelivery, school] = await Promise.all([
     getDeliveryData(date),
@@ -55,7 +57,7 @@ export default async function DeliveryTicketPage({
     <div className="space-y-4">
       {/* Screen-only controls */}
       <div className="flex items-center gap-3 print:hidden">
-        <Button variant="ghost" size="icon" render={<Link href={`/delivery?date=${dateStr}`} />}>
+        <Button variant="ghost" size="icon" nativeButton={false} render={<Link href={`/delivery?date=${dateStr}`} />}>
           <ChevronLeft className="size-4" />
         </Button>
         <h1 className="text-xl font-bold">Delivery Ticket</h1>

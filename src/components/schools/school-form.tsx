@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 
 const schema = z.object({
   name: z.string().min(1, "Required"),
@@ -129,32 +130,24 @@ export function SchoolForm({ defaultValues, routes, counties, onSubmit, onCancel
 
         <div className="space-y-1">
           <Label>Route</Label>
-          <Select
+          <Combobox
             value={watch("routeId")?.toString() ?? ""}
             onValueChange={(v) => setValue("routeId", v ? Number(v) : null)}
-          >
-            <SelectTrigger><SelectValue placeholder="Select route" /></SelectTrigger>
-            <SelectContent>
-              {routes.map((r) => (
-                <SelectItem key={r.id} value={r.id.toString()}>{r.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={routes.map((r) => ({ value: r.id.toString(), label: r.name }))}
+            placeholder="Select route…"
+            clearable
+          />
         </div>
 
         <div className="space-y-1">
           <Label>County</Label>
-          <Select
+          <Combobox
             value={watch("countyId")?.toString() ?? ""}
             onValueChange={(v) => setValue("countyId", v ? Number(v) : null)}
-          >
-            <SelectTrigger><SelectValue placeholder="Select county" /></SelectTrigger>
-            <SelectContent>
-              {counties.map((c) => (
-                <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={counties.map((c) => ({ value: c.id.toString(), label: c.name }))}
+            placeholder="Select county…"
+            clearable
+          />
         </div>
 
         <div className="space-y-1">

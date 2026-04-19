@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { upsertMealPrice } from "@/lib/actions/billing";
 
@@ -13,6 +13,7 @@ type SchoolRow = {
   schoolId: number;
   schoolName: string;
   schoolMenuId: number;
+  billingGroupIds: number[];
   prices: Record<string, number>; // `${mealId}-${ageGroupId}` → price
 };
 
@@ -27,7 +28,7 @@ export function MealPricesTab({
   ageGroups: AgeGroup[];
   schoolRows: SchoolRow[];
 }) {
-  const [selectedGroup, setSelectedGroup] = useState<string>(groups[0]?.id.toString() ?? "");
+  const [selectedGroup, setSelectedGroup] = useState<string>("all");
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     schoolRows.forEach((s) => {
@@ -39,10 +40,9 @@ export function MealPricesTab({
   });
   const [, startTransition] = useTransition();
 
-  const groupId = Number(selectedGroup);
-  const filtered = schoolRows.filter((s) =>
-    groupId ? true : true // all shown; filter would need billingGroupId on schoolRow
-  );
+  const filtered = selectedGroup === "all"
+    ? schoolRows
+    : schoolRows.filter((s) => s.billingGroupIds.includes(Number(selectedGroup)));
 
   function cellKey(schoolId: number, mealId: number, ageGroupId: number) {
     return `${schoolId}-${mealId}-${ageGroupId}`;
@@ -74,14 +74,16 @@ export function MealPricesTab({
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium">Billing Group:</span>
-        <Select value={selectedGroup} onValueChange={(v) => v && setSelectedGroup(v)}>
-          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {groups.map((g) => (
-              <SelectItem key={g.id} value={g.id.toString()}>{g.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Combobox
+          className="w-48"
+          value={selectedGroup}
+          onValueChange={(v) => setSelectedGroup(v || "all")}
+          options={[
+            { value: "all", label: "All Schools" },
+            ...groups.map((g) => ({ value: g.id.toString(), label: g.name })),
+          ]}
+          placeholder="All Schools"
+        />
       </div>
 
       <p className="text-xs text-muted-foreground">Tab away from a cell to save. Prices are per kid per meal.</p>
@@ -110,7 +112,7 @@ export function MealPricesTab({
           </TableHeader>
           <TableBody>
             {filtered.map((school) => (
-              <TableRow key={school.schoolId}>
+              <TableRow key={school.schoolMenuId}>
                 <TableCell className="sticky left-0 bg-background font-medium">{school.schoolName}</TableCell>
                 {meals.flatMap((meal) =>
                   ageGroups.map((ag) => {

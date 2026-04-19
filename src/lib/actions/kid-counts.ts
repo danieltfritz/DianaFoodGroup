@@ -5,6 +5,31 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 
+const MilkCountSchema = z.object({
+  schoolId: z.coerce.number(),
+  date: z.coerce.date(),
+  mealId: z.coerce.number(),
+  milkTypeId: z.coerce.number(),
+  count: z.coerce.number().min(0),
+});
+
+export async function upsertMilkCount(data: z.infer<typeof MilkCountSchema>) {
+  const parsed = MilkCountSchema.parse(data);
+  await prisma.milkCount.upsert({
+    where: {
+      schoolId_date_mealId_milkTypeId: {
+        schoolId: parsed.schoolId,
+        date: parsed.date,
+        mealId: parsed.mealId,
+        milkTypeId: parsed.milkTypeId,
+      },
+    },
+    create: parsed,
+    update: { count: parsed.count },
+  });
+  revalidatePath("/kid-counts");
+}
+
 const KidCountSchema = z.object({
   schoolId: z.coerce.number(),
   schoolMenuId: z.coerce.number(),

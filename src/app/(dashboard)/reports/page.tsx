@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DateNav } from "@/components/kid-counts/date-nav";
+import { parseLocalDate } from "@/lib/cycle";
 import { Button } from "@/components/ui/button";
 import { FoodAuditReport } from "@/components/reports/food-audit-report";
 import { SchoolSummaryReport } from "@/components/reports/school-summary-report";
@@ -21,7 +22,7 @@ export default async function ReportsPage({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const dateStr = dateParam ?? today.toISOString().split("T")[0];
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
 
   const [productionResult, schoolSummary, containerReport, milkReport, itemReport, productionSummary] = await Promise.all([
     calculateProduction(date),
@@ -40,10 +41,10 @@ export default async function ReportsPage({
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Reports</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" render={<Link href="/reports/fruit" />}>
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/reports/fruit" />}>
             Fruit Report
           </Button>
-          <Button variant="outline" size="sm" render={<Link href={`/reports/walkthrough?date=${dateStr}`} />}>
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/walkthrough?date=${dateStr}`} />}>
             Walk-Through
           </Button>
           <DateNav date={dateStr} />

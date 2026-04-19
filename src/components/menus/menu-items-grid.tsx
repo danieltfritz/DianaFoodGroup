@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { X, Plus } from "lucide-react";
 import { addMenuItem, removeMenuItem } from "@/lib/actions/menus";
 
@@ -82,14 +83,12 @@ export function MenuItemsGrid({ menuId, cycleWeeks, meals, foodItems, menuItems 
         </div>
         <div className="space-y-1 flex-1 min-w-48">
           <p className="text-xs text-muted-foreground">Food Item</p>
-          <Select value={selectedFood} onValueChange={(v) => v && setSelectedFood(v)}>
-            <SelectTrigger><SelectValue placeholder="Select food item" /></SelectTrigger>
-            <SelectContent>
-              {foodItems.map((f) => (
-                <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Combobox
+            value={selectedFood}
+            onValueChange={(v) => setSelectedFood(v)}
+            options={foodItems.map((f) => ({ value: String(f.id), label: f.name }))}
+            placeholder="Select food item…"
+          />
         </div>
         <Button onClick={handleAdd} disabled={!selectedMeal || !selectedFood}>
           <Plus className="mr-2 size-4" />Add Item

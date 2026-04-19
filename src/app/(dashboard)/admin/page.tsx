@@ -47,13 +47,18 @@ export default async function AdminPage() {
     changedAt: e.changedAt,
   }));
 
+  const serializedFoodItems = foodItems.map((f) => ({
+    ...f,
+    containerThreshold: f.containerThreshold == null ? null : Number(f.containerThreshold),
+  }));
+
   return (
     <AdminTabs
       routes={routes}
       counties={counties}
       ageGroups={ageGroups}
       meals={meals}
-      foodItems={foodItems}
+      foodItems={serializedFoodItems}
       containers={containers}
       users={users}
       currentUserId={session.user!.id!}

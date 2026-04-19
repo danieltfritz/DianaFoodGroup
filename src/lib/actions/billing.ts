@@ -24,11 +24,24 @@ export async function deleteBillingGroup(id: number) {
 }
 
 export async function setSchoolBillingGroup(schoolId: number, billingGroupId: number | null) {
-  // Remove existing
   await prisma.billingSchoolGroup.deleteMany({ where: { schoolId } });
   if (billingGroupId) {
     await prisma.billingSchoolGroup.create({ data: { schoolId, billingGroupId } });
   }
+  revalidatePath("/billing");
+}
+
+export async function addSchoolToBillingGroup(schoolId: number, billingGroupId: number) {
+  await prisma.billingSchoolGroup.upsert({
+    where: { billingGroupId_schoolId: { billingGroupId, schoolId } },
+    create: { schoolId, billingGroupId },
+    update: {},
+  });
+  revalidatePath("/billing");
+}
+
+export async function removeSchoolFromBillingGroup(schoolId: number, billingGroupId: number) {
+  await prisma.billingSchoolGroup.deleteMany({ where: { schoolId, billingGroupId } });
   revalidatePath("/billing");
 }
 

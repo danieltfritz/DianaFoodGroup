@@ -42,7 +42,7 @@ export default async function BillingRunPage({ params }: { params: { runId: stri
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" render={<Link href="/billing" />}>
+        <Button variant="ghost" size="icon" nativeButton={false} render={<Link href="/billing" />}>
           <ChevronLeft className="size-4" />
         </Button>
         <div className="flex-1">
@@ -51,7 +51,7 @@ export default async function BillingRunPage({ params }: { params: { runId: stri
           </h1>
           <p className="text-sm text-muted-foreground">Created {new Date(run.createdAt).toLocaleDateString()}</p>
         </div>
-        <Button variant="outline" render={<a href={`/api/billing/${runId}/export`} download />}>
+        <Button variant="outline" nativeButton={false} render={<a href={`/api/billing/${runId}/export`} download />}>
           <Download className="mr-2 size-4" />Export CSV
         </Button>
       </div>

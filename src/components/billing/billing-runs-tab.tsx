@@ -81,14 +81,14 @@ export function BillingRunsTab({ runs }: { runs: BillingRun[] }) {
                     <div className="flex gap-1 justify-end">
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="outline" nativeButton={false}
                         render={<a href={`/api/billing/${r.id}/export`} download />}
                       >
                         <Download className="mr-1 size-3" />CSV
                       </Button>
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="outline" nativeButton={false}
                         render={<a href={`/api/billing/${r.id}/export?format=iif`} download />}
                       >
                         <Download className="mr-1 size-3" />IIF

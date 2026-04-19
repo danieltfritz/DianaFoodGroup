@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
 import { PrintButton } from "@/components/delivery/print-button";
 import { getDeliveryData } from "@/lib/delivery";
+import { parseLocalDate } from "@/lib/cycle";
 import type { DeliverySchool } from "@/lib/delivery";
 
 function SchoolBlock({ school }: { school: DeliverySchool }) {
@@ -78,7 +79,7 @@ export default async function WalkthroughPage({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const dateStr = dateParam ?? today.toISOString().split("T")[0];
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
 
   const allSchools = await getDeliveryData(date);
   const active = allSchools.filter((s) => s.lines.length > 0 || s.isClosed);
@@ -101,7 +102,7 @@ export default async function WalkthroughPage({
     <div className="space-y-4">
       {/* Screen controls */}
       <div className="flex items-center gap-3 print:hidden">
-        <Button variant="ghost" size="icon" render={<Link href="/reports" />}>
+        <Button variant="ghost" size="icon" nativeButton={false} render={<Link href="/reports" />}>
           <ChevronLeft className="size-4" />
         </Button>
         <h1 className="text-xl font-bold">Walk-Through</h1>

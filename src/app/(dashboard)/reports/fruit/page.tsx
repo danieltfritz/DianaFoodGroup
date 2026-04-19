@@ -35,7 +35,7 @@ export default async function FruitReportPage({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 print:hidden">
-        <Button variant="ghost" size="icon" render={<Link href="/reports" />}>
+        <Button variant="ghost" size="icon" nativeButton={false} render={<Link href="/reports" />}>
           <ChevronLeft className="size-4" />
         </Button>
         <h1 className="text-xl font-bold">Fruit Report</h1>

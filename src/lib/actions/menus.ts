@@ -39,12 +39,13 @@ const MenuItemSchema = z.object({
 
 export async function addMenuItem(data: z.infer<typeof MenuItemSchema>) {
   const parsed = MenuItemSchema.parse(data);
-  await prisma.menuItem.upsert({
+  const item = await prisma.menuItem.upsert({
     where: { menuId_foodItemId_mealId_week_dayId: parsed },
     create: parsed,
     update: {},
   });
   revalidatePath(`/menus/${parsed.menuId}`);
+  return { id: item.id };
 }
 
 export async function removeMenuItem(id: number, menuId: number) {

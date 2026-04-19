@@ -120,7 +120,9 @@ export function FoodItemsTable({ foodItems, containers }: { foodItems: FoodItem[
               )}
               {foodItems.map((f) => (
                 <TableRow key={f.id}>
-                  <TableCell className="font-medium">{f.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <button className="text-left hover:underline" onClick={() => openEdit(f)}>{f.name}</button>
+                  </TableCell>
                   <TableCell>
                     <Badge variant={f.tempType === "hot" ? "destructive" : "secondary"}>{f.tempType}</Badge>
                   </TableCell>

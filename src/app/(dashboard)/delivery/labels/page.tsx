@@ -1,15 +1,17 @@
 import { getDeliveryData } from "@/lib/delivery";
+import { parseLocalDate } from "@/lib/cycle";
 import { PrintButton } from "@/components/delivery/print-button";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
 
-export default async function LabelsPage({ searchParams }: { searchParams: { date?: string; route?: string } }) {
+export default async function LabelsPage({ searchParams }: { searchParams: Promise<{ date?: string; route?: string }> }) {
+  const { date: dateParam, route: routeParam } = await searchParams;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dateStr = searchParams.date ?? today.toISOString().split("T")[0];
-  const date = new Date(dateStr);
-  const routeFilter = searchParams.route ? Number(searchParams.route) : null;
+  const dateStr = dateParam ?? today.toISOString().split("T")[0];
+  const date = parseLocalDate(dateStr);
+  const routeFilter = routeParam ? Number(routeParam) : null;
 
   const allSchools = await getDeliveryData(date);
   const schools = allSchools.filter((s) => {
@@ -46,7 +48,7 @@ export default async function LabelsPage({ searchParams }: { searchParams: { dat
     <div>
       {/* Screen controls */}
       <div className="flex items-center gap-3 mb-4 print:hidden">
-        <Button variant="ghost" size="icon" render={<Link href={`/delivery?date=${dateStr}`} />}>
+        <Button variant="ghost" size="icon" nativeButton={false} render={<Link href={`/delivery?date=${dateStr}`} />}>
           <ChevronLeft className="size-4" />
         </Button>
         <h1 className="text-xl font-bold">Food Labels — {dayName}, {dateShort}</h1>

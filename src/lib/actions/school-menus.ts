@@ -44,3 +44,17 @@ export async function deleteSchoolClosing(id: number, schoolId: number) {
   await prisma.schoolClosing.delete({ where: { id } });
   revalidatePath(`/schools/${schoolId}`);
 }
+
+const HolidaySchema = z.object({
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+});
+
+export async function createHolidayClosing(data: z.infer<typeof HolidaySchema>) {
+  const { startDate, endDate } = HolidaySchema.parse(data);
+  const schools = await prisma.school.findMany({ where: { active: true }, select: { id: true } });
+  await prisma.schoolClosing.createMany({
+    data: schools.map((s) => ({ schoolId: s.id, startDate, endDate })),
+  });
+  revalidatePath("/schools");
+}

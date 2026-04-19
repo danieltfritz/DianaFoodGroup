@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { schoolDeliversOn } from "@/lib/cycle";
+import { schoolDeliversOn, parseLocalDate } from "@/lib/cycle";
 import { KidCountGrid } from "@/components/kid-counts/kid-count-grid";
 import { DateNav } from "@/components/kid-counts/date-nav";
 import { CopyLastWeekButton } from "@/components/kid-counts/copy-last-week-button";
@@ -14,9 +14,9 @@ export default async function KidCountsPage({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const dateStr = dateParam ?? today.toISOString().split("T")[0];
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
 
-  const [allSchools, meals, ageGroups, existingCounts, closings] = await Promise.all([
+  const [allSchools, meals, ageGroups, existingCounts, existingMilkCounts, milkTypes, closings] = await Promise.all([
     prisma.school.findMany({
       where: { active: true },
       include: {
@@ -35,6 +35,8 @@ export default async function KidCountsPage({
     prisma.meal.findMany({ orderBy: { id: "asc" } }),
     prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
     prisma.kidCount.findMany({ where: { date } }),
+    prisma.milkCount.findMany({ where: { date } }),
+    prisma.milkType.findMany({ orderBy: { id: "asc" } }),
     prisma.schoolClosing.findMany({
       where: { startDate: { lte: date }, endDate: { gte: date } },
     }),
@@ -52,32 +54,39 @@ export default async function KidCountsPage({
         .forEach((kc) => {
           counts[`${kc.mealId}-${kc.ageGroupId}`] = kc.count;
         });
+      const milkCounts: Record<string, number> = {};
+      existingMilkCounts
+        .filter((mc) => mc.schoolId === s.id)
+        .forEach((mc) => {
+          milkCounts[`${mc.mealId}-${mc.milkTypeId}`] = mc.count;
+        });
+
       return {
         schoolId: s.id,
         schoolName: s.name,
         schoolMenuId: schoolMenu.id,
         isClosed: closedSchoolIds.has(s.id),
         counts,
+        milkCounts,
       };
     });
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-4">
         <h1 className="text-2xl font-bold">Kid Counts</h1>
-        <div className="flex items-center gap-3">
-          <CopyLastWeekButton date={dateStr} />
-          <DateNav date={dateStr} />
-        </div>
+        <DateNav date={dateStr} />
+        <CopyLastWeekButton date={dateStr} />
+        <span className="text-sm text-muted-foreground">
+          {schools.filter((s) => !s.isClosed).length} schools · click away to save
+        </span>
       </div>
-      <p className="text-sm text-muted-foreground">
-        {schools.filter((s) => !s.isClosed).length} schools delivering · Click away from a cell to save
-      </p>
       <KidCountGrid
         date={dateStr}
         schools={schools}
         meals={meals}
         ageGroups={ageGroups}
+        milkTypes={milkTypes}
       />
     </div>
   );

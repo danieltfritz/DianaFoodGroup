@@ -8,13 +8,14 @@ export default async function BillingPage() {
   const [groups, schools, meals, ageGroups, schoolMenus, runs] = await Promise.all([
     prisma.billingGroup.findMany({ orderBy: { name: "asc" } }),
     prisma.school.findMany({
+      where: { active: true },
       orderBy: { name: "asc" },
       include: { billingGroups: { select: { billingGroupId: true } } },
     }),
     prisma.meal.findMany({ orderBy: { id: "asc" } }),
     prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
     prisma.schoolMenu.findMany({
-      where: { endDate: null },
+      where: { endDate: null, school: { active: true } },
       include: {
         school: { select: { id: true, name: true } },
         mealPrices: true,
@@ -30,22 +31,32 @@ export default async function BillingPage() {
   const schoolsWithGroup = schools.map((s) => ({
     id: s.id,
     name: s.name,
-    billingGroupId: s.billingGroups[0]?.billingGroupId ?? null,
+    billingGroupIds: s.billingGroups.map((bg) => bg.billingGroupId),
   }));
 
-  // Build school rows for meal prices tab — one row per active school menu
-  const schoolRows = schoolMenus.map((sm) => {
+  // Build school rows for meal prices tab — one row per school (latest active menu wins)
+  const billingGroupsBySchool = new Map<number, number[]>();
+  for (const s of schools) {
+    billingGroupsBySchool.set(s.id, s.billingGroups.map((bg) => bg.billingGroupId));
+  }
+
+  const schoolRowMap = new Map<number, { schoolId: number; schoolName: string; schoolMenuId: number; billingGroupIds: number[]; prices: Record<string, number> }>();
+  for (const sm of schoolMenus) {
+    const existing = schoolRowMap.get(sm.schoolId);
+    if (existing && existing.schoolMenuId > sm.id) continue;
     const priceMap: Record<string, number> = {};
     for (const p of sm.mealPrices) {
       priceMap[`${p.mealId}-${p.ageGroupId}`] = Number(p.price);
     }
-    return {
+    schoolRowMap.set(sm.schoolId, {
       schoolId: sm.schoolId,
       schoolName: sm.school.name,
       schoolMenuId: sm.id,
+      billingGroupIds: billingGroupsBySchool.get(sm.schoolId) ?? [],
       prices: priceMap,
-    };
-  });
+    });
+  }
+  const schoolRows = Array.from(schoolRowMap.values());
 
   return (
     <div className="space-y-4">

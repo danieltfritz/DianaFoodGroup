@@ -1,24 +1,27 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getDeliveryData } from "@/lib/delivery";
+import { parseLocalDate } from "@/lib/cycle";
 import { DateNav } from "@/components/kid-counts/date-nav";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileText, Tag } from "lucide-react";
 
-export default async function DeliveryPage({ searchParams }: { searchParams: { date?: string; route?: string } }) {
+export default async function DeliveryPage({ searchParams }: { searchParams: Promise<{ date?: string; route?: string }> }) {
+  const { date: dateParam, route: routeParam } = await searchParams;
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dateStr = searchParams.date ?? today.toISOString().split("T")[0];
-  const date = new Date(dateStr);
+  const dateStr = dateParam ?? today.toISOString().split("T")[0];
+  const date = parseLocalDate(dateStr);
 
   const [schools, routes] = await Promise.all([
     getDeliveryData(date),
     prisma.route.findMany({ orderBy: { name: "asc" } }),
   ]);
 
-  const routeFilter = searchParams.route ? Number(searchParams.route) : null;
+  const routeFilter = routeParam ? Number(routeParam) : null;
   const filtered = routeFilter
     ? schools.filter((s) => s.routeId === routeFilter)
     : schools;
@@ -31,7 +34,7 @@ export default async function DeliveryPage({ searchParams }: { searchParams: { d
         <h1 className="text-2xl font-bold">Delivery</h1>
         <div className="flex items-center gap-2">
           <DateNav date={dateStr} />
-          <Button variant="outline" size="sm" render={<Link href={`/delivery/labels?date=${dateStr}${routeFilter ? `&route=${routeFilter}` : ""}`} />}>
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/delivery/labels?date=${dateStr}${routeFilter ? `&route=${routeFilter}` : ""}`} />}>
             <Tag className="mr-2 size-4" />Labels
           </Button>
         </div>
@@ -41,7 +44,7 @@ export default async function DeliveryPage({ searchParams }: { searchParams: { d
       <div className="flex gap-2 flex-wrap">
         <Button
           size="sm"
-          variant={!routeFilter ? "default" : "outline"}
+          variant={!routeFilter ? "default" : "outline"} nativeButton={false}
           render={<Link href={`/delivery?date=${dateStr}`} />}
         >
           All Routes
@@ -50,7 +53,7 @@ export default async function DeliveryPage({ searchParams }: { searchParams: { d
           <Button
             key={r.id}
             size="sm"
-            variant={routeFilter === r.id ? "default" : "outline"}
+            variant={routeFilter === r.id ? "default" : "outline"} nativeButton={false}
             render={<Link href={`/delivery?date=${dateStr}&route=${r.id}`} />}
           >
             {r.name}
@@ -97,7 +100,7 @@ export default async function DeliveryPage({ searchParams }: { searchParams: { d
                 </TableCell>
                 <TableCell>
                   {!s.isClosed && (
-                    <Button size="sm" variant="ghost" render={<Link href={`/delivery/${s.schoolId}?date=${dateStr}`} />}>
+                    <Button size="sm" variant="ghost" nativeButton={false} render={<Link href={`/delivery/${s.schoolId}?date=${dateStr}`} />}>
                       <FileText className="mr-1 size-3" />Ticket
                     </Button>
                   )}

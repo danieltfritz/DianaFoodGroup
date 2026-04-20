@@ -146,6 +146,77 @@ async function importSchoolPaperComments() {
   log(`  ✓ done`);
 }
 
+async function importFoodPaperItems() {
+  const rows = parseCSV("PaperFood.csv");
+
+  const validPaperIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[PaperItem]`)).map((r) => r.id)
+  );
+  const validSizeIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[PaperSize]`)).map((r) => r.id)
+  );
+
+  const valid = rows.filter((r) => {
+    const paperId = int(r["PaperId"]);
+    const sizeId = int(r["PaperSizeId"]);
+    if (!validPaperIds.has(paperId)) return false;
+    if (sizeId !== 0 && !validSizeIds.has(sizeId)) return false;
+    return true;
+  });
+
+  log(`FoodPaperItems: ${valid.length} valid rows (${rows.length - valid.length} skipped — invalid PaperId or SizeId)`);
+
+  const sqls = valid.map((r) => {
+    const sizeId = int(r["PaperSizeId"]);
+    const schoolId = int(r["SchoolId"]);
+    const always = (r["always"] ?? "").trim().toUpperCase() === "TRUE" ? 1 : 0;
+    return `INSERT INTO [dbo].[FoodPaperItem] (id, schoolId, foodId, mealId, ageGroupId, paperId, paperSizeId, isAlways) VALUES (${int(r["PaperFoodId"])}, ${schoolId === 0 ? "NULL" : schoolId}, ${int(r["FoodId"])}, ${int(r["MealId"])}, ${int(r["AgeGroupId"])}, ${int(r["PaperId"])}, ${sizeId === 0 ? "NULL" : sizeId}, ${always})`;
+  });
+
+  await batchInsert(sqls);
+  log(`  ✓ done`);
+}
+
+async function importPaperOverrides() {
+  const rows = parseCSV("PaperOverRides.csv");
+
+  const validSchoolIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[School]`)).map((r) => r.id)
+  );
+  const validPaperIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[PaperItem]`)).map((r) => r.id)
+  );
+  const validSizeIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[PaperSize]`)).map((r) => r.id)
+  );
+
+  const valid = rows.filter((r) => {
+    const schoolId = int(r["SchoolId"]);
+    const paperId = int(r["PaperId"]);
+    const sizeId = int(r["PaperSizeId"]);
+    const orPaperId = int(r["OrPaperId"]);
+    const orSizeId = int(r["OrPaperSizeId"]);
+    if (!validSchoolIds.has(schoolId)) return false;
+    if (!validPaperIds.has(paperId)) return false;
+    if (sizeId !== 0 && !validSizeIds.has(sizeId)) return false;
+    if (orPaperId !== 0 && !validPaperIds.has(orPaperId)) return false;
+    if (orSizeId !== 0 && !validSizeIds.has(orSizeId)) return false;
+    return true;
+  });
+
+  log(`PaperOverrides: ${valid.length} valid rows (${rows.length - valid.length} skipped — orphaned FK)`);
+
+  const sqls = valid.map((r) => {
+    const sizeId = int(r["PaperSizeId"]);
+    const orPaperId = int(r["OrPaperId"]);
+    const orSizeId = int(r["OrPaperSizeId"]);
+    return `INSERT INTO [dbo].[PaperOverride] (id, schoolId, mealId, ageGroupId, paperId, paperSizeId, orPaperId, orPaperSizeId) VALUES (${int(r["PaperOverRideId"])}, ${int(r["SchoolId"])}, ${int(r["MealId"])}, ${int(r["AgeGroupId"])}, ${int(r["PaperId"])}, ${sizeId === 0 ? "NULL" : sizeId}, ${orPaperId === 0 ? "NULL" : orPaperId}, ${orSizeId === 0 ? "NULL" : orSizeId})`;
+  });
+
+  await batchInsert(sqls);
+  log(`  ✓ done`);
+}
+
 async function importMenuPaperItems() {
   const rows = parseCSV("MenuPaperItems.csv");
 
@@ -222,8 +293,19 @@ async function main() {
     await importMenuPaperItems();
     log("");
     log("PG3 import complete!");
+  } else if (mode === "pg4") {
+    log("Starting paper goods PG4 import...");
+    const existingFood = await prisma.foodPaperItem.count().catch(() => 0);
+    if (existingFood > 0) {
+      console.error(`ERROR: FoodPaperItem table already has ${existingFood} rows. Clear it first.`);
+      process.exit(1);
+    }
+    await importFoodPaperItems();
+    await importPaperOverrides();
+    log("");
+    log("PG4 import complete!");
   } else {
-    console.error(`Unknown mode: ${mode}. Use pg1, pg2, or pg3.`);
+    console.error(`Unknown mode: ${mode}. Use pg1, pg2, pg3, or pg4.`);
     process.exit(1);
   }
 }

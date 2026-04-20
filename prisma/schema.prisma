@@ -98,6 +98,7 @@ model School {
   milkCounts     MilkCount[]
   paperGroups    SchoolPaperGroup[]
   paperComment   SchoolPaperComment?
+  paperOverrides PaperOverride[]
 }
 
 // ─── Food Catalog ─────────────────────────────────────────────────────────────
@@ -352,6 +353,39 @@ model SchoolPaperComment {
   school   School @relation(fields: [schoolId], references: [id])
 }
 
+model FoodPaperItem {
+  id          Int        @id
+  schoolId    Int?
+  foodId      Int
+  mealId      Int
+  ageGroupId  Int
+  paperId     Int
+  paperSizeId Int?
+  isAlways    Boolean    @default(false)
+  paper       PaperItem  @relation("FoodPaperItemPaper", fields: [paperId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paperSize   PaperSize? @relation("FoodPaperItemSize", fields: [paperSizeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([foodId, mealId, ageGroupId])
+}
+
+model PaperOverride {
+  id            Int        @id
+  schoolId      Int
+  mealId        Int
+  ageGroupId    Int
+  paperId       Int
+  paperSizeId   Int?
+  orPaperId     Int?
+  orPaperSizeId Int?
+  school        School     @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paper         PaperItem  @relation("OverridePaper", fields: [paperId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orPaper       PaperItem? @relation("OverrideOrPaper", fields: [orPaperId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paperSize     PaperSize? @relation("OverridePaperSize", fields: [paperSizeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orPaperSize   PaperSize? @relation("OverrideOrPaperSize", fields: [orPaperSizeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([schoolId, mealId, ageGroupId])
+}
+
 model MenuPaperItem {
   id          Int        @id
   schoolId    Int?
@@ -372,21 +406,27 @@ model MenuPaperItem {
 }
 
 model PaperItem {
-  id          Int              @id
-  name        String           @db.VarChar(100)
-  active      Boolean          @default(true)
-  sizes       PaperSize[]
-  containers  PaperContainer[]
-  menuItems   MenuPaperItem[]
+  id              Int              @id
+  name            String           @db.VarChar(100)
+  active          Boolean          @default(true)
+  sizes           PaperSize[]
+  containers      PaperContainer[]
+  menuItems       MenuPaperItem[]
+  foodPaperItems  FoodPaperItem[]  @relation("FoodPaperItemPaper")
+  overrides       PaperOverride[]  @relation("OverridePaper")
+  orOverrides     PaperOverride[]  @relation("OverrideOrPaper")
 }
 
 model PaperSize {
-  id         Int              @id
-  paperId    Int
-  name       String?          @db.VarChar(50)
-  paper      PaperItem        @relation(fields: [paperId], references: [id])
-  containers PaperContainer[]
-  menuItems  MenuPaperItem[]
+  id              Int              @id
+  paperId         Int
+  name            String?          @db.VarChar(50)
+  paper           PaperItem        @relation(fields: [paperId], references: [id])
+  containers      PaperContainer[]
+  menuItems       MenuPaperItem[]
+  foodPaperItems  FoodPaperItem[]  @relation("FoodPaperItemSize")
+  overrides       PaperOverride[]  @relation("OverridePaperSize")
+  orOverrides     PaperOverride[]  @relation("OverrideOrPaperSize")
 }
 
 model PaperContainer {

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { MenuItemsGrid } from "@/components/menus/menu-items-grid";
 import { MenuItemsPicker } from "@/components/menus/menu-items-picker";
+import { MenuPaperTab } from "@/components/menus/menu-paper-tab";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
@@ -12,7 +13,7 @@ export default async function MenuDetailPage({ params }: { params: Promise<{ id:
   const id = Number(idParam);
   if (isNaN(id)) notFound();
 
-  const [menu, meals, foodItems] = await Promise.all([
+  const [menu, meals, foodItems, ageGroups, paperItemsAll, paperSizesAll, menuPaperItems] = await Promise.all([
     prisma.menu.findUnique({
       where: { id },
       include: {
@@ -24,6 +25,13 @@ export default async function MenuDetailPage({ params }: { params: Promise<{ id:
     }),
     prisma.meal.findMany({ orderBy: { id: "asc" } }),
     prisma.foodItem.findMany({ orderBy: { name: "asc" } }),
+    prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
+    prisma.paperItem.findMany({ orderBy: { name: "asc" } }),
+    prisma.paperSize.findMany({ orderBy: { id: "asc" } }),
+    prisma.menuPaperItem.findMany({
+      where: { menuId: id },
+      orderBy: [{ week: "asc" }, { dayId: "asc" }, { mealId: "asc" }, { ageGroupId: "asc" }],
+    }),
   ]);
 
   if (!menu) notFound();
@@ -56,6 +64,7 @@ export default async function MenuDetailPage({ params }: { params: Promise<{ id:
         <TabsList>
           <TabsTrigger value="picker">Picker</TabsTrigger>
           <TabsTrigger value="grid">Grid</TabsTrigger>
+          <TabsTrigger value="paper">Paper Items</TabsTrigger>
         </TabsList>
 
         <TabsContent value="picker" className="pt-4">
@@ -75,6 +84,17 @@ export default async function MenuDetailPage({ params }: { params: Promise<{ id:
             meals={meals}
             foodItems={foodItems}
             menuItems={menu.items}
+          />
+        </TabsContent>
+
+        <TabsContent value="paper" className="pt-4">
+          <MenuPaperTab
+            cycleWeeks={menu.cycleWeeks}
+            items={menuPaperItems}
+            paperItems={paperItemsAll}
+            paperSizes={paperSizesAll}
+            meals={meals}
+            ageGroups={ageGroups}
           />
         </TabsContent>
       </Tabs>

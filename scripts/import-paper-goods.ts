@@ -146,6 +146,43 @@ async function importSchoolPaperComments() {
   log(`  ✓ done`);
 }
 
+async function importMenuPaperItems() {
+  const rows = parseCSV("MenuPaperItems.csv");
+
+  const validMenuIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[Menu]`)).map((r) => r.id)
+  );
+  const validPaperIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[PaperItem]`)).map((r) => r.id)
+  );
+  const validSizeIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[PaperSize]`)).map((r) => r.id)
+  );
+
+  const valid = rows.filter((r) => {
+    const menuId = int(r["MenuId"]);
+    const paperId = int(r["PaperId"]);
+    const sizeId = int(r["PaperSizeId"]);
+    if (menuId === 0) return false;
+    if (!validMenuIds.has(menuId)) return false;
+    if (!validPaperIds.has(paperId)) return false;
+    if (sizeId !== 0 && !validSizeIds.has(sizeId)) return false;
+    return true;
+  });
+
+  log(`MenuPaperItems: ${valid.length} valid rows (${rows.length - valid.length} skipped — invalid FK or MenuId=0)`);
+
+  const sqls = valid.map((r) => {
+    const sizeId = int(r["PaperSizeId"]);
+    const schoolId = int(r["SchoolId"]);
+    const always = (r["Always"] ?? "").trim().toUpperCase() === "TRUE" ? 1 : 0;
+    return `INSERT INTO [dbo].[MenuPaperItem] (id, schoolId, menuId, week, dayId, mealId, ageGroupId, paperId, paperSizeId, paperQty, isAlways) VALUES (${int(r["MenuPaperId"])}, ${schoolId === 0 ? "NULL" : schoolId}, ${int(r["MenuId"])}, ${int(r["Week"])}, ${int(r["DayId"])}, ${int(r["MealId"])}, ${int(r["AgeGroupId"])}, ${int(r["PaperId"])}, ${sizeId === 0 ? "NULL" : sizeId}, ${int(r["PaperQty"])}, ${always})`;
+  });
+
+  await batchInsert(sqls);
+  log(`  ✓ done`);
+}
+
 async function main() {
   const mode = process.argv[2] ?? "pg1";
 
@@ -175,8 +212,18 @@ async function main() {
     await importSchoolPaperComments();
     log("");
     log("PG2 import complete!");
+  } else if (mode === "pg3") {
+    log("Starting paper goods PG3 import...");
+    const existing = await prisma.menuPaperItem.count().catch(() => 0);
+    if (existing > 0) {
+      console.error(`ERROR: MenuPaperItem table already has ${existing} rows. Clear it first.`);
+      process.exit(1);
+    }
+    await importMenuPaperItems();
+    log("");
+    log("PG3 import complete!");
   } else {
-    console.error(`Unknown mode: ${mode}. Use pg1 or pg2.`);
+    console.error(`Unknown mode: ${mode}. Use pg1, pg2, or pg3.`);
     process.exit(1);
   }
 }

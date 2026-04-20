@@ -167,6 +167,7 @@ model Menu {
   menuTypeId    Int?
   items         MenuItem[]
   schoolMenus   SchoolMenu[]
+  paperItems    MenuPaperItem[]
 }
 
 model MenuItem {
@@ -351,12 +352,32 @@ model SchoolPaperComment {
   school   School @relation(fields: [schoolId], references: [id])
 }
 
+model MenuPaperItem {
+  id          Int        @id
+  schoolId    Int?
+  menuId      Int
+  week        Int
+  dayId       Int
+  mealId      Int
+  ageGroupId  Int
+  paperId     Int
+  paperSizeId Int?
+  paperQty    Int        @default(0)
+  isAlways    Boolean    @default(false)
+  menu        Menu       @relation(fields: [menuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paper       PaperItem  @relation(fields: [paperId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paperSize   PaperSize? @relation(fields: [paperSizeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([menuId, week, dayId])
+}
+
 model PaperItem {
-  id         Int              @id
-  name       String           @db.VarChar(100)
-  active     Boolean          @default(true)
-  sizes      PaperSize[]
-  containers PaperContainer[]
+  id          Int              @id
+  name        String           @db.VarChar(100)
+  active      Boolean          @default(true)
+  sizes       PaperSize[]
+  containers  PaperContainer[]
+  menuItems   MenuPaperItem[]
 }
 
 model PaperSize {
@@ -365,6 +386,7 @@ model PaperSize {
   name       String?          @db.VarChar(50)
   paper      PaperItem        @relation(fields: [paperId], references: [id])
   containers PaperContainer[]
+  menuItems  MenuPaperItem[]
 }
 
 model PaperContainer {

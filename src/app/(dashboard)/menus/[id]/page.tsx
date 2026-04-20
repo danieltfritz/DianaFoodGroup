@@ -36,6 +36,11 @@ export default async function MenuDetailPage({ params }: { params: Promise<{ id:
 
   if (!menu) notFound();
 
+  const serializedFoodItems = foodItems.map((f) => ({
+    ...f,
+    containerThreshold: f.containerThreshold == null ? null : Number(f.containerThreshold),
+  }));
+
   const menuItems = menu.items.map((i) => ({
     id: i.id,
     foodItemId: i.foodItemId,
@@ -43,6 +48,14 @@ export default async function MenuDetailPage({ params }: { params: Promise<{ id:
     week: i.week,
     dayId: i.dayId,
     foodItem: { id: i.foodItem.id, name: i.foodItem.name, tempType: i.foodItem.tempType },
+  }));
+
+  const serializedMenuItems = menu.items.map((i) => ({
+    ...i,
+    foodItem: {
+      ...i.foodItem,
+      containerThreshold: i.foodItem.containerThreshold == null ? null : Number(i.foodItem.containerThreshold),
+    },
   }));
 
   return (
@@ -72,7 +85,7 @@ export default async function MenuDetailPage({ params }: { params: Promise<{ id:
             menuId={menu.id}
             cycleWeeks={menu.cycleWeeks}
             meals={meals}
-            foodItems={foodItems}
+            foodItems={serializedFoodItems}
             menuItems={menuItems}
           />
         </TabsContent>
@@ -82,8 +95,8 @@ export default async function MenuDetailPage({ params }: { params: Promise<{ id:
             menuId={menu.id}
             cycleWeeks={menu.cycleWeeks}
             meals={meals}
-            foodItems={foodItems}
-            menuItems={menu.items}
+            foodItems={serializedFoodItems}
+            menuItems={serializedMenuItems}
           />
         </TabsContent>
 

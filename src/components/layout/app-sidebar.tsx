@@ -12,6 +12,7 @@ import {
   BarChart3,
   Settings,
   Home,
+  Package,
 } from "lucide-react";
 import {
   Sidebar,
@@ -33,6 +34,7 @@ const navItems = [
   { title: "Delivery", href: "/delivery", icon: Truck },
   { title: "Billing", href: "/billing", icon: Receipt },
   { title: "Reports", href: "/reports", icon: BarChart3 },
+  { title: "Paper Goods", href: "/paper-goods", icon: Package },
 ];
 
 const adminItems = [

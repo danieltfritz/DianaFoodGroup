@@ -99,6 +99,7 @@ model School {
   paperGroups    SchoolPaperGroup[]
   paperComment   SchoolPaperComment?
   paperOverrides PaperOverride[]
+  paperRunAmounts PaperRunSchoolAmount[]
 }
 
 // ─── Food Catalog ─────────────────────────────────────────────────────────────
@@ -331,9 +332,10 @@ model KidCountAudit {
 // ─── Paper Goods ─────────────────────────────────────────────────────────────
 
 model PaperGroup {
-  id      Int                @id
-  name    String             @db.VarChar(100)
+  id      Int                  @id
+  name    String               @db.VarChar(100)
   schools SchoolPaperGroup[]
+  runs    PaperProductionRun[]
 }
 
 model SchoolPaperGroup {
@@ -351,6 +353,32 @@ model SchoolPaperComment {
   schoolId Int    @unique
   comment  String @db.VarChar(1000)
   school   School @relation(fields: [schoolId], references: [id])
+}
+
+model PaperProductionRun {
+  id           Int                    @id @default(autoincrement())
+  startDate    DateTime               @db.Date
+  endDate      DateTime               @db.Date
+  createdAt    DateTime               @default(now())
+  paperGroupId Int?
+  notes        String?                @db.VarChar(500)
+  group        PaperGroup?            @relation(fields: [paperGroupId], references: [id])
+  amounts      PaperRunSchoolAmount[]
+}
+
+model PaperRunSchoolAmount {
+  id          Int                @id @default(autoincrement())
+  runId       Int
+  schoolId    Int
+  paperId     Int
+  paperSizeId Int?
+  totalQty    Int
+  run         PaperProductionRun @relation(fields: [runId], references: [id])
+  school      School             @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paper       PaperItem          @relation("RunAmountPaper", fields: [paperId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paperSize   PaperSize?         @relation("RunAmountSize", fields: [paperSizeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([runId, schoolId])
 }
 
 model FoodPaperItem {
@@ -415,6 +443,7 @@ model PaperItem {
   foodPaperItems  FoodPaperItem[]  @relation("FoodPaperItemPaper")
   overrides       PaperOverride[]  @relation("OverridePaper")
   orOverrides     PaperOverride[]  @relation("OverrideOrPaper")
+  runAmounts      PaperRunSchoolAmount[] @relation("RunAmountPaper")
 }
 
 model PaperSize {
@@ -427,6 +456,7 @@ model PaperSize {
   foodPaperItems  FoodPaperItem[]  @relation("FoodPaperItemSize")
   overrides       PaperOverride[]  @relation("OverridePaperSize")
   orOverrides     PaperOverride[]  @relation("OverrideOrPaperSize")
+  runAmounts      PaperRunSchoolAmount[] @relation("RunAmountSize")
 }
 
 model PaperContainer {

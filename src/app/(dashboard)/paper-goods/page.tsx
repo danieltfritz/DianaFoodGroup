@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { calculatePaperProduction } from "@/lib/paper-production";
 import { saveProductionRun } from "@/lib/actions/paper";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BarChart3 } from "lucide-react";
 
 export default async function PaperGoodsPage({
   searchParams,
@@ -50,7 +52,13 @@ export default async function PaperGoodsPage({
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <h1 className="text-2xl font-bold">Paper Goods</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Paper Goods</h1>
+        <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/paper-goods/reports" />}>
+          <BarChart3 className="size-4 mr-2" />
+          Reports
+        </Button>
+      </div>
 
       {/* Calculate form — GET */}
       <form method="GET" className="flex flex-wrap gap-3 items-end">

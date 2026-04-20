@@ -51,9 +51,14 @@ export default async function BillingRunPage({ params }: { params: { runId: stri
           </h1>
           <p className="text-sm text-muted-foreground">Created {new Date(run.createdAt).toLocaleDateString()}</p>
         </div>
-        <Button variant="outline" nativeButton={false} render={<a href={`/api/billing/${runId}/export`} download />}>
-          <Download className="mr-2 size-4" />Export CSV
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" nativeButton={false} render={<a href={`/api/billing/${runId}/export`} download />}>
+            <Download className="mr-2 size-4" />Export CSV
+          </Button>
+          <Button variant="outline" nativeButton={false} render={<a href={`/api/billing/${runId}/export?format=iif`} download />}>
+            <Download className="mr-2 size-4" />Export IIF
+          </Button>
+        </div>
       </div>
 
       {/* School summary */}

@@ -92,11 +92,14 @@ export default async function DeliveryPage({ searchParams }: { searchParams: Pro
                 <TableCell className="text-right">{s.isClosed ? "—" : s.totalKids}</TableCell>
                 <TableCell className="text-right">{s.isClosed ? "—" : s.lines.length}</TableCell>
                 <TableCell>
-                  {s.isClosed
-                    ? <Badge variant="secondary">Closed</Badge>
-                    : s.totalKids === 0
-                    ? <Badge variant="outline">No counts</Badge>
-                    : <Badge>Ready</Badge>}
+                  <div className="flex gap-1 flex-wrap">
+                    {s.isClosed
+                      ? <Badge variant="secondary">Closed</Badge>
+                      : s.totalKids === 0
+                      ? <Badge variant="outline">No counts</Badge>
+                      : <Badge>Ready</Badge>}
+                    {s.isBox && <Badge variant="outline">Box</Badge>}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {!s.isClosed && (

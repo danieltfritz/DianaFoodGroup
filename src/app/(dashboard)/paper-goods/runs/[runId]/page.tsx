@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, ClipboardList } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default async function PaperRunPage({ params }: { params: Promise<{ runId: string }> }) {
@@ -40,7 +40,7 @@ export default async function PaperRunPage({ params }: { params: Promise<{ runId
         <Button variant="ghost" size="icon" nativeButton={false} render={<Link href="/paper-goods" />}>
           <ChevronLeft className="size-4" />
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">
             Paper Run — {fmtDate(run.startDate)} to {fmtDate(run.endDate)}
           </h1>
@@ -48,6 +48,10 @@ export default async function PaperRunPage({ params }: { params: Promise<{ runId
             {run.group?.name ?? "No group"} · Created {new Date(run.createdAt).toLocaleDateString()} · {grandTotal.toLocaleString()} total items
           </p>
         </div>
+        <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/paper-goods/runs/${run.id}/pack`} />}>
+          <ClipboardList className="size-4 mr-2" />
+          Packing List
+        </Button>
       </div>
 
       {Array.from(bySchool.values()).map((school) => (

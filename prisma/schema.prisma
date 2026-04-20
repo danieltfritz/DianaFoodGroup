@@ -96,6 +96,8 @@ model School {
   schoolClosings SchoolClosing[]
   billingGroups  BillingSchoolGroup[]
   milkCounts     MilkCount[]
+  paperGroups    SchoolPaperGroup[]
+  paperComment   SchoolPaperComment?
 }
 
 // ─── Food Catalog ─────────────────────────────────────────────────────────────
@@ -325,6 +327,29 @@ model KidCountAudit {
 }
 
 // ─── Paper Goods ─────────────────────────────────────────────────────────────
+
+model PaperGroup {
+  id      Int                @id
+  name    String             @db.VarChar(100)
+  schools SchoolPaperGroup[]
+}
+
+model SchoolPaperGroup {
+  id           Int        @id @default(autoincrement())
+  schoolId     Int
+  paperGroupId Int
+  school       School     @relation(fields: [schoolId], references: [id])
+  paperGroup   PaperGroup @relation(fields: [paperGroupId], references: [id])
+
+  @@unique([schoolId, paperGroupId])
+}
+
+model SchoolPaperComment {
+  id       Int    @id @default(autoincrement())
+  schoolId Int    @unique
+  comment  String @db.VarChar(1000)
+  school   School @relation(fields: [schoolId], references: [id])
+}
 
 model PaperItem {
   id         Int              @id

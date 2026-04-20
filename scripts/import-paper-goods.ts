@@ -105,23 +105,80 @@ async function importPaperContainers(validPaperIds: Set<number>, validSizeIds: S
   log(`  ✓ done`);
 }
 
-async function main() {
-  log("Starting paper goods PG1 import...");
+async function importPaperGroups() {
+  const rows = parseCSV("PaperGroups.csv");
+  const valid = rows.filter((r) => nullStr(r["PaperGroup"]));
+  log(`PaperGroups: ${valid.length} valid rows (${rows.length - valid.length} skipped — empty name)`);
+  await batchInsert(valid.map((r) =>
+    `INSERT INTO [dbo].[PaperGroup] (id, name) VALUES (${int(r["PaperGroupId"])}, ${S(nullStr(r["PaperGroup"]))})`
+  ));
+  log(`  ✓ done`);
+  return new Set(valid.map((r) => int(r["PaperGroupId"])));
+}
 
-  const existing = await prisma.paperItem.count().catch(() => 0);
-  if (existing > 0) {
-    console.error(`ERROR: PaperItem table already has ${existing} rows. Clear it first.`);
+async function importSchoolPaperGroups(validGroupIds: Set<number>) {
+  const rows = parseCSV("PaperSchoolGroups.csv");
+  const validSchoolIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[School]`)).map((r) => r.id)
+  );
+  const valid = rows.filter((r) =>
+    validGroupIds.has(int(r["PaperGroupId"])) && validSchoolIds.has(int(r["SchoolId"]))
+  );
+  log(`SchoolPaperGroups: ${valid.length} valid rows (${rows.length - valid.length} skipped — orphaned FK)`);
+  await batchInsert(valid.map((r) =>
+    `INSERT INTO [dbo].[SchoolPaperGroup] (schoolId, paperGroupId) VALUES (${int(r["SchoolId"])}, ${int(r["PaperGroupId"])})`
+  ));
+  log(`  ✓ done`);
+}
+
+async function importSchoolPaperComments() {
+  const rows = parseCSV("PaperComments.csv");
+  const validSchoolIds = new Set(
+    (await prisma.$queryRawUnsafe<{ id: number }[]>(`SELECT id FROM [dbo].[School]`)).map((r) => r.id)
+  );
+  const valid = rows.filter((r) =>
+    nullStr(r["Comments"]) && validSchoolIds.has(int(r["SchoolId"]))
+  );
+  log(`SchoolPaperComments: ${valid.length} valid rows (${rows.length - valid.length} skipped — empty or orphaned)`);
+  await batchInsert(valid.map((r) =>
+    `INSERT INTO [dbo].[SchoolPaperComment] (schoolId, comment) VALUES (${int(r["SchoolId"])}, ${S(nullStr(r["Comments"]))})`
+  ));
+  log(`  ✓ done`);
+}
+
+async function main() {
+  const mode = process.argv[2] ?? "pg1";
+
+  if (mode === "pg1") {
+    log("Starting paper goods PG1 import...");
+    const existing = await prisma.paperItem.count().catch(() => 0);
+    if (existing > 0) {
+      console.error(`ERROR: PaperItem table already has ${existing} rows. Clear it first.`);
+      process.exit(1);
+    }
+    const validPaperIds = await importPaperItems();
+    const validSizeIds = await importPaperSizes(validPaperIds);
+    await importPaperContainers(validPaperIds, validSizeIds);
+    log("");
+    log("PG1 import complete!");
+    log(`  ${validPaperIds.size} paper items`);
+    log(`  ${validSizeIds.size} paper sizes`);
+  } else if (mode === "pg2") {
+    log("Starting paper goods PG2 import...");
+    const existingGroups = await prisma.paperGroup.count().catch(() => 0);
+    if (existingGroups > 0) {
+      console.error(`ERROR: PaperGroup table already has ${existingGroups} rows. Clear it first.`);
+      process.exit(1);
+    }
+    const validGroupIds = await importPaperGroups();
+    await importSchoolPaperGroups(validGroupIds);
+    await importSchoolPaperComments();
+    log("");
+    log("PG2 import complete!");
+  } else {
+    console.error(`Unknown mode: ${mode}. Use pg1 or pg2.`);
     process.exit(1);
   }
-
-  const validPaperIds = await importPaperItems();
-  const validSizeIds = await importPaperSizes(validPaperIds);
-  await importPaperContainers(validPaperIds, validSizeIds);
-
-  log("");
-  log("PG1 import complete!");
-  log(`  ${validPaperIds.size} paper items`);
-  log(`  ${validSizeIds.size} paper sizes`);
 }
 
 main()

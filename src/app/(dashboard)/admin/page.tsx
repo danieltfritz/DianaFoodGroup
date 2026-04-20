@@ -7,7 +7,7 @@ export default async function AdminPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
-  const [routes, counties, ageGroups, meals, foodItems, containers, users, auditRaw] = await Promise.all([
+  const [routes, counties, ageGroups, meals, foodItems, containers, users, auditRaw, paperItems] = await Promise.all([
     prisma.route.findMany({ orderBy: { name: "asc" } }),
     prisma.county.findMany({ orderBy: { name: "asc" } }),
     prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
@@ -18,9 +18,11 @@ export default async function AdminPage() {
     prisma.kidCountAudit.findMany({
       orderBy: { changedAt: "desc" },
       take: 200,
-      include: {
-        user: { select: { name: true, email: true } },
-      },
+      include: { user: { select: { name: true, email: true } } },
+    }),
+    prisma.paperItem.findMany({
+      orderBy: { name: "asc" },
+      include: { sizes: { orderBy: { id: "asc" } }, containers: { orderBy: { id: "asc" } } },
     }),
   ]);
 
@@ -63,6 +65,7 @@ export default async function AdminPage() {
       users={users}
       currentUserId={session.user!.id!}
       auditEntries={auditEntries}
+      paperItems={paperItems}
     />
   );
 }

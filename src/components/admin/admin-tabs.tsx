@@ -3,6 +3,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LookupTable } from "./lookup-table";
 import { FoodItemsTable } from "./food-items-table";
+import { PaperItemsTab } from "./paper-items-tab";
 import { UsersTab } from "./users-tab";
 import { AuditLogTab } from "./audit-log-tab";
 import {
@@ -30,6 +31,9 @@ type AuditEntry = {
   ageGroupName: string; oldCount: number; newCount: number;
   userName: string | null; userEmail: string; changedAt: Date;
 };
+type PaperSize = { id: number; name: string | null };
+type PaperContainer = { id: number; paperSizeId: number; containerName: string; containerSize: number };
+type PaperItem = { id: number; name: string; active: boolean; sizes: PaperSize[]; containers: PaperContainer[] };
 
 interface AdminTabsProps {
   routes: Route[];
@@ -41,11 +45,12 @@ interface AdminTabsProps {
   users: User[];
   currentUserId: string;
   auditEntries: AuditEntry[];
+  paperItems: PaperItem[];
 }
 
 export function AdminTabs({
   routes, counties, ageGroups, meals, foodItems, containers,
-  users, currentUserId, auditEntries,
+  users, currentUserId, auditEntries, paperItems,
 }: AdminTabsProps) {
   return (
     <div>
@@ -59,6 +64,7 @@ export function AdminTabs({
           <TabsTrigger value="ageGroups">Age Groups</TabsTrigger>
           <TabsTrigger value="meals">Meals</TabsTrigger>
           <TabsTrigger value="food">Food Items</TabsTrigger>
+          <TabsTrigger value="paper">Paper Items</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -119,6 +125,10 @@ export function AdminTabs({
 
         <TabsContent value="food">
           <FoodItemsTable foodItems={foodItems} containers={containers} />
+        </TabsContent>
+
+        <TabsContent value="paper">
+          <PaperItemsTab paperItems={paperItems} />
         </TabsContent>
       </Tabs>
     </div>

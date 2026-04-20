@@ -324,6 +324,34 @@ model KidCountAudit {
   @@index([schoolId, date])
 }
 
+// ─── Paper Goods ─────────────────────────────────────────────────────────────
+
+model PaperItem {
+  id         Int              @id
+  name       String           @db.VarChar(100)
+  active     Boolean          @default(true)
+  sizes      PaperSize[]
+  containers PaperContainer[]
+}
+
+model PaperSize {
+  id         Int              @id
+  paperId    Int
+  name       String?          @db.VarChar(50)
+  paper      PaperItem        @relation(fields: [paperId], references: [id])
+  containers PaperContainer[]
+}
+
+model PaperContainer {
+  id            Int       @id
+  paperId       Int
+  paperSizeId   Int
+  containerName String    @db.VarChar(50)
+  containerSize Int
+  paper         PaperItem @relation(fields: [paperId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paperSize     PaperSize @relation(fields: [paperSizeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
 // ─── Milk Overrides ───────────────────────────────────────────────────────────
 
 model MilkOverride {

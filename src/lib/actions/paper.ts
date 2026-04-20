@@ -46,6 +46,54 @@ export async function updatePaperItem(id: number, name: string, active: boolean)
   revalidatePath("/admin");
 }
 
+// ─── Paper Sizes ──────────────────────────────────────────────────────────────
+
+export async function createPaperSize(paperId: number, name: string): Promise<number> {
+  const agg = await prisma.paperSize.aggregate({ _max: { id: true } });
+  const nextId = (agg._max.id ?? 0) + 1;
+  await prisma.paperSize.create({ data: { id: nextId, paperId, name: name.trim() || null } });
+  revalidatePath("/admin");
+  return nextId;
+}
+
+export async function updatePaperSize(id: number, name: string) {
+  await prisma.paperSize.update({ where: { id }, data: { name: name.trim() || null } });
+  revalidatePath("/admin");
+}
+
+export async function deletePaperSize(id: number) {
+  await prisma.paperContainer.deleteMany({ where: { paperSizeId: id } });
+  await prisma.paperSize.delete({ where: { id } });
+  revalidatePath("/admin");
+}
+
+// ─── Paper Containers ─────────────────────────────────────────────────────────
+
+export async function createPaperContainer(
+  paperId: number, paperSizeId: number, containerName: string, containerSize: number
+): Promise<number> {
+  const agg = await prisma.paperContainer.aggregate({ _max: { id: true } });
+  const nextId = (agg._max.id ?? 0) + 1;
+  await prisma.paperContainer.create({
+    data: { id: nextId, paperId, paperSizeId, containerName: containerName.trim(), containerSize },
+  });
+  revalidatePath("/admin");
+  return nextId;
+}
+
+export async function updatePaperContainer(id: number, containerName: string, containerSize: number) {
+  await prisma.paperContainer.update({
+    where: { id },
+    data: { containerName: containerName.trim(), containerSize },
+  });
+  revalidatePath("/admin");
+}
+
+export async function deletePaperContainer(id: number) {
+  await prisma.paperContainer.delete({ where: { id } });
+  revalidatePath("/admin");
+}
+
 // ─── Paper Groups ─────────────────────────────────────────────────────────────
 
 export async function createPaperGroup(name: string) {

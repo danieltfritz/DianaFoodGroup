@@ -8,10 +8,11 @@ import { SchoolSummaryReport } from "@/components/reports/school-summary-report"
 import { ContainerCountReport } from "@/components/reports/container-count-report";
 import { MilkReport } from "@/components/reports/milk-report";
 import { MilkCountReport } from "@/components/reports/milk-count-report";
+import { DailyKidCountReport } from "@/components/reports/daily-kid-count-report";
 import { ItemReport } from "@/components/reports/item-report";
 import { ProductionSummaryReport } from "@/components/reports/production-summary-report";
 import { calculateProduction } from "@/lib/production";
-import { getSchoolSummary, getContainerReport, getMilkReport, getMilkCountReport, getItemReport, getProductionSummary } from "@/lib/reports";
+import { getSchoolSummary, getContainerReport, getMilkReport, getMilkCountReport, getDailyKidCountReport, getItemReport, getProductionSummary } from "@/lib/reports";
 
 export default async function ReportsPage({
   searchParams,
@@ -25,12 +26,13 @@ export default async function ReportsPage({
   const dateStr = dateParam ?? today.toISOString().split("T")[0];
   const date = parseLocalDate(dateStr);
 
-  const [productionResult, schoolSummary, containerReport, milkReport, milkCountReport, itemReport, productionSummary] = await Promise.all([
+  const [productionResult, schoolSummary, containerReport, milkReport, milkCountReport, kidCountReport, itemReport, productionSummary] = await Promise.all([
     calculateProduction(date),
     getSchoolSummary(date),
     getContainerReport(date),
     getMilkReport(date),
     getMilkCountReport(date),
+    getDailyKidCountReport(date),
     getItemReport(date),
     getProductionSummary(date),
   ]);
@@ -55,6 +57,9 @@ export default async function ReportsPage({
           <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/milk-export?date=${dateStr}`} />}>
             Export Milk
           </Button>
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/kid-count-export?date=${dateStr}`} />}>
+            Export Kid Counts
+          </Button>
           <DateNav date={dateStr} />
         </div>
       </div>
@@ -66,6 +71,7 @@ export default async function ReportsPage({
           <TabsTrigger value="containers">Container Count</TabsTrigger>
           <TabsTrigger value="milk">Milk Report</TabsTrigger>
           <TabsTrigger value="milk-count">Milk Count</TabsTrigger>
+          <TabsTrigger value="kid-counts">Kid Counts</TabsTrigger>
           <TabsTrigger value="item-report">Item Report</TabsTrigger>
           <TabsTrigger value="prod-summary">Prod Summary</TabsTrigger>
         </TabsList>
@@ -88,6 +94,10 @@ export default async function ReportsPage({
 
         <TabsContent value="milk-count" className="mt-4">
           <MilkCountReport data={milkCountReport} />
+        </TabsContent>
+
+        <TabsContent value="kid-counts" className="mt-4">
+          <DailyKidCountReport data={kidCountReport} />
         </TabsContent>
 
         <TabsContent value="item-report" className="mt-4">

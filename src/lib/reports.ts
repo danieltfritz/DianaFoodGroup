@@ -662,6 +662,94 @@ export async function getMilkCountReport(deliveryDate: Date): Promise<MilkCountR
   return { columns, routes, grandTotals };
 }
 
+// ─── Daily Kid Count Report ───────────────────────────────────────────────────
+
+export type KidCountMealRow = {
+  mealId: number;
+  mealName: string;
+  counts: Record<number, number>; // ageGroupId → count
+  total: number;
+};
+
+export type KidCountMenuSection = {
+  menuId: number;
+  menuName: string;
+  meals: KidCountMealRow[];
+  totals: Record<number, number>;
+  grandTotal: number;
+};
+
+export type DailyKidCountReport = {
+  ageGroups: { id: number; name: string }[];
+  sections: KidCountMenuSection[];
+  grandTotals: Record<number, number>;
+  grandTotal: number;
+};
+
+export async function getDailyKidCountReport(deliveryDate: Date): Promise<DailyKidCountReport> {
+  const [ageGroups, meals, kidCounts] = await Promise.all([
+    prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
+    prisma.meal.findMany({ orderBy: { id: "asc" } }),
+    prisma.kidCount.findMany({
+      where: { date: deliveryDate, count: { gt: 0 } },
+      include: { schoolMenu: { include: { menu: true } } },
+    }),
+  ]);
+
+  // menu → meal → ageGroup → count
+  const menuMap = new Map<number, { menuName: string; meals: Map<number, Map<number, number>> }>();
+
+  for (const kc of kidCounts) {
+    const menu = kc.schoolMenu.menu;
+    let menuAcc = menuMap.get(menu.id);
+    if (!menuAcc) {
+      menuAcc = { menuName: menu.name, meals: new Map() };
+      menuMap.set(menu.id, menuAcc);
+    }
+    let mealAcc = menuAcc.meals.get(kc.mealId);
+    if (!mealAcc) {
+      mealAcc = new Map();
+      menuAcc.meals.set(kc.mealId, mealAcc);
+    }
+    mealAcc.set(kc.ageGroupId, (mealAcc.get(kc.ageGroupId) ?? 0) + kc.count);
+  }
+
+  const grandTotals: Record<number, number> = {};
+
+  const sections: KidCountMenuSection[] = Array.from(menuMap.entries())
+    .sort(([, a], [, b]) => a.menuName.localeCompare(b.menuName))
+    .map(([menuId, acc]) => {
+      const mealRows: KidCountMealRow[] = meals
+        .filter((m) => acc.meals.has(m.id))
+        .map((m) => {
+          const agMap = acc.meals.get(m.id)!;
+          const counts: Record<number, number> = {};
+          let total = 0;
+          for (const ag of ageGroups) {
+            const cnt = agMap.get(ag.id) ?? 0;
+            counts[ag.id] = cnt;
+            total += cnt;
+          }
+          return { mealId: m.id, mealName: m.name, counts, total };
+        });
+
+      const totals: Record<number, number> = {};
+      let grandTotal = 0;
+      for (const ag of ageGroups) {
+        const sum = mealRows.reduce((s, r) => s + (r.counts[ag.id] ?? 0), 0);
+        totals[ag.id] = sum;
+        grandTotal += sum;
+        grandTotals[ag.id] = (grandTotals[ag.id] ?? 0) + sum;
+      }
+
+      return { menuId, menuName: acc.menuName, meals: mealRows, totals, grandTotal };
+    });
+
+  const overallTotal = Object.values(grandTotals).reduce((s, v) => s + v, 0);
+
+  return { ageGroups, sections, grandTotals, grandTotal: overallTotal };
+}
+
 // ─── Production Summary Report ────────────────────────────────────────────────
 
 export type SummarySchoolRow = {

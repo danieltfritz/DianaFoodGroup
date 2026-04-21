@@ -570,6 +570,98 @@ export async function getItemReport(deliveryDate: Date): Promise<ItemReportSecti
     .sort((a, b) => a.tempType.localeCompare(b.tempType) || a.foodName.localeCompare(b.foodName));
 }
 
+// ─── Milk Count Report ───────────────────────────────────────────────────────
+
+export type MilkCountColumn = {
+  milkTypeId: number;
+  name: string;
+  labelColor: string;
+};
+
+export type MilkCountSchoolRow = {
+  schoolId: number;
+  schoolName: string;
+  counts: Record<number, number>;
+};
+
+export type MilkCountRouteGroup = {
+  routeId: number | null;
+  routeName: string;
+  schools: MilkCountSchoolRow[];
+  totals: Record<number, number>;
+};
+
+export type MilkCountReportData = {
+  columns: MilkCountColumn[];
+  routes: MilkCountRouteGroup[];
+  grandTotals: Record<number, number>;
+};
+
+export async function getMilkCountReport(deliveryDate: Date): Promise<MilkCountReportData> {
+  const records = await prisma.milkCount.findMany({
+    where: { date: deliveryDate, count: { gt: 0 } },
+    include: {
+      school: { include: { route: true } },
+      milkType: true,
+    },
+    orderBy: [{ school: { route: { name: "asc" } } }, { school: { name: "asc" } }],
+  });
+
+  const columnMap = new Map<number, MilkCountColumn>();
+  const routeMap = new Map<number | null, { routeName: string; schoolMap: Map<number, { schoolId: number; schoolName: string; counts: Map<number, number> }> }>();
+
+  for (const r of records) {
+    if (!columnMap.has(r.milkTypeId)) {
+      columnMap.set(r.milkTypeId, { milkTypeId: r.milkTypeId, name: r.milkType.name, labelColor: r.milkType.labelColor });
+    }
+
+    const routeId = r.school.routeId;
+    const routeName = r.school.route?.name ?? "No Route";
+
+    let routeAcc = routeMap.get(routeId);
+    if (!routeAcc) {
+      routeAcc = { routeName, schoolMap: new Map() };
+      routeMap.set(routeId, routeAcc);
+    }
+
+    let schoolAcc = routeAcc.schoolMap.get(r.schoolId);
+    if (!schoolAcc) {
+      schoolAcc = { schoolId: r.schoolId, schoolName: r.school.name, counts: new Map() };
+      routeAcc.schoolMap.set(r.schoolId, schoolAcc);
+    }
+
+    schoolAcc.counts.set(r.milkTypeId, (schoolAcc.counts.get(r.milkTypeId) ?? 0) + r.count);
+  }
+
+  const columns = Array.from(columnMap.values()).sort((a, b) => a.milkTypeId - b.milkTypeId);
+
+  const routes: MilkCountRouteGroup[] = Array.from(routeMap.entries())
+    .sort(([, a], [, b]) => a.routeName.localeCompare(b.routeName))
+    .map(([routeId, acc]) => {
+      const schools: MilkCountSchoolRow[] = Array.from(acc.schoolMap.values())
+        .sort((a, b) => a.schoolName.localeCompare(b.schoolName))
+        .map((s) => ({ schoolId: s.schoolId, schoolName: s.schoolName, counts: Object.fromEntries(s.counts) }));
+
+      const totals: Record<number, number> = {};
+      for (const s of schools) {
+        for (const [tid, cnt] of Object.entries(s.counts)) {
+          totals[Number(tid)] = (totals[Number(tid)] ?? 0) + cnt;
+        }
+      }
+
+      return { routeId, routeName: acc.routeName, schools, totals };
+    });
+
+  const grandTotals: Record<number, number> = {};
+  for (const route of routes) {
+    for (const [tid, cnt] of Object.entries(route.totals)) {
+      grandTotals[Number(tid)] = (grandTotals[Number(tid)] ?? 0) + cnt;
+    }
+  }
+
+  return { columns, routes, grandTotals };
+}
+
 // ─── Production Summary Report ────────────────────────────────────────────────
 
 export type SummarySchoolRow = {

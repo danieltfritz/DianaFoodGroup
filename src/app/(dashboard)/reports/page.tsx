@@ -60,6 +60,12 @@ export default async function ReportsPage({
           <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/kid-count-export?date=${dateStr}`} />}>
             Export Kid Counts
           </Button>
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/delivery-tickets?date=${dateStr}`} />}>
+            Delivery Tickets
+          </Button>
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/delivery-tickets-export?date=${dateStr}`} />}>
+            Export Tickets
+          </Button>
           <DateNav date={dateStr} />
         </div>
       </div>

@@ -436,6 +436,8 @@ export type ItemReportSection = {
   foodName: string;
   pkUnit: string | null;
   tempType: string;
+  containerName: string;
+  containerSizes: ContainerSizeInput[];
   rows: ItemReportRow[];
   grandTotal: number;
 };
@@ -471,6 +473,7 @@ export async function getItemReport(deliveryDate: Date): Promise<ItemReportSecti
     foodName: string;
     tempType: string;
     pkUnit: string | null;
+    containerName: string;
     containerSizes: ContainerSizeInput[];
     containerStrategy: string;
     containerThreshold: number | null;
@@ -523,6 +526,7 @@ export async function getItemReport(deliveryDate: Date): Promise<ItemReportSecti
           foodName: mi.foodItem.name,
           tempType: mi.foodItem.tempType,
           pkUnit: mi.foodItem.pkUnit,
+          containerName: mi.foodItem.container?.name ?? "",
           containerSizes,
           containerStrategy: mi.foodItem.containerStrategy,
           containerThreshold: mi.foodItem.containerThreshold
@@ -557,6 +561,8 @@ export async function getItemReport(deliveryDate: Date): Promise<ItemReportSecti
         foodName: fa.foodName,
         pkUnit: fa.pkUnit,
         tempType: fa.tempType,
+        containerName: fa.containerName,
+        containerSizes: fa.containerSizes,
         rows,
         grandTotal: rows.reduce((sum, r) => sum + r.totalAmount, 0),
       };

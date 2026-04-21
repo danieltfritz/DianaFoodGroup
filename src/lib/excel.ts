@@ -88,6 +88,36 @@ export function buildWorkbook(sheets: SheetDef[]): ExcelJS.Workbook {
   return wb;
 }
 
+// ─── Raw / custom-layout sheets ──────────────────────────────────────────────
+
+export function createWorkbook(): ExcelJS.Workbook {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "CCFP";
+  wb.created = new Date();
+  return wb;
+}
+
+export function addRawSheet(
+  wb: ExcelJS.Workbook,
+  name: string,
+  build: (ws: ExcelJS.Worksheet, styles: typeof SHEET_STYLES) => void
+): void {
+  const ws = wb.addWorksheet(name);
+  build(ws, SHEET_STYLES);
+}
+
+export const SHEET_STYLES = {
+  bold: { bold: true } as Partial<ExcelJS.Font>,
+  headerFill: {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE8E8E8" },
+  } as ExcelJS.Fill,
+  borderTop: {
+    top: { style: "thin", color: { argb: "FF999999" } },
+  } as Partial<ExcelJS.Borders>,
+};
+
 export async function workbookToBuffer(wb: ExcelJS.Workbook): Promise<Buffer> {
   const arrayBuffer = await wb.xlsx.writeBuffer();
   return Buffer.from(arrayBuffer);

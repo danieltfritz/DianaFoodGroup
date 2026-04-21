@@ -47,6 +47,9 @@ export default async function ReportsPage({
           <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/walkthrough?date=${dateStr}`} />}>
             Walk-Through
           </Button>
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/export?date=${dateStr}`} />}>
+            Export Items
+          </Button>
           <DateNav date={dateStr} />
         </div>
       </div>

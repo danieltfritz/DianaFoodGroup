@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Download } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default async function PaperReportsPage({
@@ -79,13 +79,25 @@ export default async function PaperReportsPage({
 
   const grandTotal = aggregated.reduce((s, i) => s + i.totalQty, 0);
 
+  const exportParams = new URLSearchParams();
+  if (selectedGroupId) exportParams.set("groupId", String(selectedGroupId));
+  exportParams.set("startDate", startStr);
+  exportParams.set("endDate", endStr);
+  const exportUrl = `/paper-goods/reports/export?${exportParams}`;
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" nativeButton={false} render={<Link href="/paper-goods" />}>
           <ChevronLeft className="size-4" />
         </Button>
-        <h1 className="text-2xl font-bold">Paper Goods Reports</h1>
+        <h1 className="text-2xl font-bold flex-1">Paper Goods Reports</h1>
+        {runs.length > 0 && (
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link href={exportUrl} />}>
+            <Download className="size-4 mr-2" />
+            Export to Excel
+          </Button>
+        )}
       </div>
 
       <form method="GET" className="flex flex-wrap gap-3 items-end">

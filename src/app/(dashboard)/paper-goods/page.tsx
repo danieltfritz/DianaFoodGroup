@@ -5,15 +5,21 @@ import { saveProductionRun } from "@/lib/actions/paper";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart3 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default async function PaperGoodsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ groupId?: string; startDate?: string; endDate?: string }>;
+  searchParams: Promise<{ mode?: string; groupId?: string; schoolId?: string; startDate?: string; endDate?: string }>;
 }) {
-  const { groupId: groupIdParam, startDate: startParam, endDate: endParam } = await searchParams;
+  const { mode: modeParam, groupId: groupIdParam, schoolId: schoolIdParam, startDate: startParam, endDate: endParam } = await searchParams;
 
-  const groups = await prisma.paperGroup.findMany({ orderBy: { name: "asc" } });
+  const mode = modeParam === "school" ? "school" : "group";
+
+  const [groups, schools] = await Promise.all([
+    prisma.paperGroup.findMany({ orderBy: { name: "asc" } }),
+    prisma.school.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
 
   const today = new Date();
   const defaultStart = new Date(today);
@@ -23,24 +29,37 @@ export default async function PaperGoodsPage({
 
   const startStr = startParam ?? defaultStart.toISOString().split("T")[0];
   const endStr = endParam ?? defaultEnd.toISOString().split("T")[0];
+
   const selectedGroupId = groupIdParam ? Number(groupIdParam) : null;
+  const selectedSchoolId = schoolIdParam ? Number(schoolIdParam) : null;
 
   let preview = null;
   let previewError: string | null = null;
 
-  if (selectedGroupId && startParam && endParam) {
+  const canCalculate = startParam && endParam && (
+    (mode === "group" && selectedGroupId) ||
+    (mode === "school" && selectedSchoolId)
+  );
+
+  if (canCalculate) {
     try {
-      const schoolIds = await prisma.schoolPaperGroup.findMany({
-        where: { paperGroupId: selectedGroupId },
-        select: { schoolId: true },
-      });
-      const ids = schoolIds.map((s) => s.schoolId);
-      if (ids.length === 0) {
-        previewError = "No schools in this group.";
+      const startDate = new Date(startParam! + "T00:00:00");
+      const endDate = new Date(endParam! + "T00:00:00");
+
+      let schoolIds: number[] = [];
+      if (mode === "group") {
+        const rows = await prisma.schoolPaperGroup.findMany({
+          where: { paperGroupId: selectedGroupId! },
+          select: { schoolId: true },
+        });
+        schoolIds = rows.map((r) => r.schoolId);
+        if (schoolIds.length === 0) previewError = "No schools in this group.";
       } else {
-        const startDate = new Date(startParam + "T00:00:00");
-        const endDate = new Date(endParam + "T00:00:00");
-        preview = await calculatePaperProduction(ids, startDate, endDate);
+        schoolIds = [selectedSchoolId!];
+      }
+
+      if (schoolIds.length > 0) {
+        preview = await calculatePaperProduction(schoolIds, startDate, endDate);
         if (preview.schoolTotals.length === 0) previewError = "No paper items calculated for this date range.";
       }
     } catch (e) {
@@ -49,6 +68,12 @@ export default async function PaperGoodsPage({
   }
 
   const grandTotal = preview?.schoolTotals.flatMap((s) => s.items).reduce((sum, i) => sum + i.totalQty, 0) ?? 0;
+
+  const tabBase = "px-4 py-1.5 text-sm rounded-md font-medium transition-colors";
+  const tabActive = "bg-primary text-primary-foreground shadow-sm";
+  const tabInactive = "text-muted-foreground hover:text-foreground hover:bg-muted";
+
+  const selectClass = "h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-52";
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -60,22 +85,47 @@ export default async function PaperGoodsPage({
         </Button>
       </div>
 
+      {/* Mode tabs */}
+      <div className="inline-flex gap-1 rounded-lg border bg-muted/40 p-1">
+        <Link
+          href={`?mode=group&startDate=${startStr}&endDate=${endStr}`}
+          className={cn(tabBase, mode === "group" ? tabActive : tabInactive)}
+        >
+          By Group
+        </Link>
+        <Link
+          href={`?mode=school&startDate=${startStr}&endDate=${endStr}`}
+          className={cn(tabBase, mode === "school" ? tabActive : tabInactive)}
+        >
+          By School
+        </Link>
+      </div>
+
       {/* Calculate form — GET */}
       <form method="GET" className="flex flex-wrap gap-3 items-end">
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium" htmlFor="groupId">Group</label>
-          <select
-            id="groupId"
-            name="groupId"
-            defaultValue={selectedGroupId ?? ""}
-            className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-48"
-          >
-            <option value="">— select —</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-        </div>
+        <input type="hidden" name="mode" value={mode} />
+
+        {mode === "group" ? (
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium" htmlFor="groupId">Group</label>
+            <select id="groupId" name="groupId" defaultValue={selectedGroupId ?? ""} className={selectClass}>
+              <option value="">— select —</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium" htmlFor="schoolId">School</label>
+            <select id="schoolId" name="schoolId" defaultValue={selectedSchoolId ?? ""} className={selectClass}>
+              <option value="">— select —</option>
+              {schools.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium" htmlFor="startDate">Start Date</label>
@@ -113,7 +163,7 @@ export default async function PaperGoodsPage({
               Preview — {preview.schoolTotals.length} school{preview.schoolTotals.length !== 1 ? "s" : ""}, {grandTotal.toLocaleString()} total items
             </h2>
             <form action={saveProductionRun}>
-              <input type="hidden" name="paperGroupId" value={selectedGroupId!} />
+              {mode === "group" && <input type="hidden" name="paperGroupId" value={selectedGroupId!} />}
               <input type="hidden" name="startDate" value={startParam!} />
               <input type="hidden" name="endDate" value={endParam!} />
               <input

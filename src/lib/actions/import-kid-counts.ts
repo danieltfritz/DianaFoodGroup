@@ -138,7 +138,7 @@ export async function importKidCounts(
   };
 
   // Parse CSV — build op params first (no Prisma calls yet)
-  type UpsertParams = {
+  type OpParams = {
     schoolId: number;
     schoolMenuId: number;
     date: Date;
@@ -151,7 +151,7 @@ export async function importKidCounts(
   const unmatched: { name: string; reason: string }[] = [];
   const errors: string[] = [];
   // Use a Map to deduplicate by key — last value wins if CSV has duplicate rows
-  const opMap = new Map<string, UpsertParams>();
+  const opMap = new Map<string, OpParams>();
   let skipped = 0;
 
   for (const line of lines) {
@@ -192,23 +192,11 @@ export async function importKidCounts(
 
   const opList = Array.from(opMap.values());
 
-  // Interactive transaction — sequential upserts so each sees the previous result
   if (opList.length > 0) {
     await prisma.$transaction(async (tx) => {
-      for (const p of opList) {
-        await tx.kidCount.upsert({
-          where: {
-            schoolId_date_mealId_ageGroupId: {
-              schoolId: p.schoolId,
-              date: p.date,
-              mealId: p.mealId,
-              ageGroupId: p.ageGroupId,
-            },
-          },
-          create: p,
-          update: { count: p.count, schoolMenuId: p.schoolMenuId },
-        });
-      }
+      // Delete any existing records for this date so re-imports are clean
+      await tx.kidCount.deleteMany({ where: { date } });
+      await tx.kidCount.createMany({ data: opList });
     });
   }
 

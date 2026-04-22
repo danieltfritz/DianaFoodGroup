@@ -14,6 +14,46 @@ export type ImportKidCountsResult = {
   ageGroupMapping: AgeGroupMap[];
 };
 
+export type DiagnosticResult = {
+  date: string;
+  totalRecords: number;
+  schools: { schoolName: string; records: number }[];
+  ageGroups: { id: number; name: string }[];
+};
+
+export async function diagnoseKidCounts(
+  _prev: DiagnosticResult | null,
+  formData: FormData
+): Promise<DiagnosticResult> {
+  const dateStr = (formData.get("date") as string | null)?.trim() ?? "";
+  if (!dateStr) return { date: "", totalRecords: 0, schools: [], ageGroups: [] };
+
+  const date = parseLocalDate(dateStr);
+
+  const [records, ageGroups] = await Promise.all([
+    prisma.kidCount.findMany({
+      where: { date },
+      include: { school: { select: { name: true } } },
+    }),
+    prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
+  ]);
+
+  const schoolCounts = new Map<string, number>();
+  for (const r of records) {
+    const name = r.school.name;
+    schoolCounts.set(name, (schoolCounts.get(name) ?? 0) + 1);
+  }
+
+  return {
+    date: dateStr,
+    totalRecords: records.length,
+    schools: Array.from(schoolCounts.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([schoolName, records]) => ({ schoolName, records })),
+    ageGroups,
+  };
+}
+
 // CSV column layout per row:
 // [0] School Name
 // [1] BreakfastMenu  [2] "Breakfast"  [3-7] age group counts
@@ -62,8 +102,9 @@ export async function importKidCounts(
     prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
   ]);
 
-  // Map the 5 CSV age columns to the first 5 DB age groups by id order
-  const mappedAgeGroups = ageGroups.slice(0, 5);
+  // Map the 5 CSV age columns to DB age groups by id order, excluding "Adults"
+  // The CSV has 5 columns; the DB may have 6 if Adults is included (always 0 in delivery)
+  const mappedAgeGroups = ageGroups.filter((ag) => !ag.name.toLowerCase().includes("adult")).slice(0, 5);
   const ageGroupMapping: AgeGroupMap[] = CSV_AGE_COL_NAMES.map((csvName, i) => ({
     csvName,
     dbId: mappedAgeGroups[i]?.id ?? -1,

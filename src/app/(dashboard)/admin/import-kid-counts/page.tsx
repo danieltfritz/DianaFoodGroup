@@ -4,12 +4,15 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
-import { importKidCounts, type ImportKidCountsResult } from "@/lib/actions/import-kid-counts";
+import {
+  importKidCounts, diagnoseKidCounts,
+  type ImportKidCountsResult, type DiagnosticResult,
+} from "@/lib/actions/import-kid-counts";
 
 function ResultPanel({ result }: { result: ImportKidCountsResult }) {
   const hasErrors = result.errors.length > 0;
   const hasUnmatched = result.unmatched.length > 0;
-  const ok = result.processed > 0 && !hasErrors;
+  const ok = result.processed > 0;
 
   return (
     <div className="space-y-4 mt-6">
@@ -36,7 +39,7 @@ function ResultPanel({ result }: { result: ImportKidCountsResult }) {
               {result.ageGroupMapping.map((m) => (
                 <tr key={m.csvName} className="border-t">
                   <td className="px-3 py-1">{m.csvName}</td>
-                  <td className="px-3 py-1 text-muted-foreground">{m.dbName}</td>
+                  <td className="px-3 py-1 text-muted-foreground">{m.dbName} (id {m.dbId})</td>
                 </tr>
               ))}
             </tbody>
@@ -67,9 +70,56 @@ function ResultPanel({ result }: { result: ImportKidCountsResult }) {
   );
 }
 
+function DiagnosticPanel({ result }: { result: DiagnosticResult }) {
+  return (
+    <div className="space-y-3 mt-4">
+      <div className="rounded-md border p-3 bg-muted/30 text-sm">
+        <p className="font-medium">DB state for <strong>{result.date}</strong></p>
+        <p className="text-muted-foreground mt-0.5">
+          <strong>{result.totalRecords}</strong> KidCount records across <strong>{result.schools.length}</strong> schools
+        </p>
+        {result.ageGroups.length > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Age groups in DB (id order): {result.ageGroups.map((ag) => `${ag.id}=${ag.name}`).join(", ")}
+          </p>
+        )}
+      </div>
+
+      {result.schools.length > 0 && (
+        <div className="max-h-48 overflow-y-auto rounded-md border text-xs">
+          <table className="w-full">
+            <thead className="bg-muted sticky top-0">
+              <tr>
+                <th className="text-left px-3 py-1.5">School</th>
+                <th className="text-right px-3 py-1.5">Records</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.schools.map((s) => (
+                <tr key={s.schoolName} className="border-t">
+                  <td className="px-3 py-1">{s.schoolName}</td>
+                  <td className="px-3 py-1 text-right">{s.records}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {result.schools.length === 0 && (
+        <p className="text-sm text-muted-foreground">No KidCount records found for this date.</p>
+      )}
+    </div>
+  );
+}
+
 export default function ImportKidCountsPage() {
-  const [result, action, pending] = useActionState<ImportKidCountsResult | null, FormData>(
+  const [importResult, importAction, importPending] = useActionState<ImportKidCountsResult | null, FormData>(
     importKidCounts,
+    null
+  );
+  const [diagResult, diagAction, diagPending] = useActionState<DiagnosticResult | null, FormData>(
+    diagnoseKidCounts,
     null
   );
 
@@ -88,15 +138,15 @@ export default function ImportKidCountsPage() {
         <p className="font-medium">Expected CSV format (DeliveryReport.csv)</p>
         <p className="text-muted-foreground">
           27 columns: School Name, BreakfastMenu, Breakfast counts ×5, LunchMenu, Lunch counts ×5,
-          Snack counts ×5, Dinner counts ×5. Age group columns must be in the same order as DB age groups sorted by ID.
+          Snack counts ×5, Dinner counts ×5. Age groups mapped by id order (Adults excluded).
         </p>
         <p className="text-muted-foreground">
-          School names are matched exactly, then by normalized name (case-insensitive, whitespace collapsed).
-          Unmatched schools are skipped and listed in the results. Zero counts are skipped.
+          School names matched exact then normalized. Unmatched schools skipped and listed. Zero counts skipped.
         </p>
       </div>
 
-      <form action={action} className="space-y-4">
+      {/* Import form */}
+      <form action={importAction} className="space-y-4">
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium" htmlFor="date">Delivery Date</label>
           <input
@@ -121,12 +171,33 @@ export default function ImportKidCountsPage() {
           />
         </div>
 
-        <Button type="submit" disabled={pending}>
-          {pending ? "Importing…" : "Import"}
+        <Button type="submit" disabled={importPending}>
+          {importPending ? "Importing…" : "Import"}
         </Button>
       </form>
 
-      {result && <ResultPanel result={result} />}
+      {importResult && <ResultPanel result={importResult} />}
+
+      {/* Diagnostic form */}
+      <div className="border-t pt-6">
+        <p className="text-sm font-medium mb-3">Diagnose — check what&apos;s in the DB for a date</p>
+        <form action={diagAction} className="flex items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground" htmlFor="diag-date">Date</label>
+            <input
+              id="diag-date"
+              type="date"
+              name="date"
+              defaultValue={today}
+              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring w-48"
+            />
+          </div>
+          <Button type="submit" variant="outline" size="sm" disabled={diagPending}>
+            {diagPending ? "Checking…" : "Check DB"}
+          </Button>
+        </form>
+        {diagResult && <DiagnosticPanel result={diagResult} />}
+      </div>
     </div>
   );
 }

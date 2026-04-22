@@ -137,11 +137,21 @@ export async function importKidCounts(
     return (list.find((sm) => sm.menu.name === menuName) ?? list[0])?.id ?? null;
   };
 
-  // Parse CSV
+  // Parse CSV — build op params first (no Prisma calls yet)
+  type UpsertParams = {
+    schoolId: number;
+    schoolMenuId: number;
+    date: Date;
+    mealId: number;
+    ageGroupId: number;
+    count: number;
+  };
+
   const lines = csvText.trim().split(/\r?\n/).slice(1); // skip header
   const unmatched: { name: string; reason: string }[] = [];
   const errors: string[] = [];
-  const ops: ReturnType<typeof prisma.kidCount.upsert>[] = [];
+  // Use a Map to deduplicate by key — last value wins if CSV has duplicate rows
+  const opMap = new Map<string, UpsertParams>();
   let skipped = 0;
 
   for (const line of lines) {
@@ -174,31 +184,37 @@ export async function importKidCounts(
           continue;
         }
 
-        ops.push(
-          prisma.kidCount.upsert({
-            where: {
-              schoolId_date_mealId_ageGroupId: {
-                schoolId: school.id,
-                date,
-                mealId: meal.id,
-                ageGroupId: ag.id,
-              },
-            },
-            create: { schoolId: school.id, schoolMenuId, date, mealId: meal.id, ageGroupId: ag.id, count },
-            update: { count, schoolMenuId },
-          })
-        );
+        const key = `${school.id}-${meal.id}-${ag.id}`;
+        opMap.set(key, { schoolId: school.id, schoolMenuId, date, mealId: meal.id, ageGroupId: ag.id, count });
       }
     }
   }
 
-  if (ops.length > 0) {
-    await prisma.$transaction(ops);
+  const opList = Array.from(opMap.values());
+
+  // Interactive transaction — sequential upserts so each sees the previous result
+  if (opList.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      for (const p of opList) {
+        await tx.kidCount.upsert({
+          where: {
+            schoolId_date_mealId_ageGroupId: {
+              schoolId: p.schoolId,
+              date: p.date,
+              mealId: p.mealId,
+              ageGroupId: p.ageGroupId,
+            },
+          },
+          create: p,
+          update: { count: p.count, schoolMenuId: p.schoolMenuId },
+        });
+      }
+    });
   }
 
   return {
     date: dateStr,
-    processed: ops.length,
+    processed: opList.length,
     skipped,
     unmatched,
     errors,

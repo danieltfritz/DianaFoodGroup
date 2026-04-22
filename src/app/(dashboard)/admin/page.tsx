@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AdminTabs } from "@/components/admin/admin-tabs";
+import { Button } from "@/components/ui/button";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -59,6 +61,13 @@ export default async function AdminPage() {
   }));
 
   return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Admin</h1>
+        <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/admin/import-kid-counts" />}>
+          Import Kid Counts
+        </Button>
+      </div>
     <AdminTabs
       routes={routes}
       counties={counties}
@@ -73,5 +82,6 @@ export default async function AdminPage() {
       paperGroups={paperGroups}
       schoolMap={schoolMap}
     />
+    </div>
   );
 }

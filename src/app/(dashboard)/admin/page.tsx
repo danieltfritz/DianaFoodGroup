@@ -18,7 +18,9 @@ export default async function AdminPage() {
     prisma.kidCountAudit.findMany({
       orderBy: { changedAt: "desc" },
       take: 200,
-      include: { user: { select: { name: true, email: true } } },
+      include: {
+        user: { select: { name: true, email: true } },
+      },
     }),
     prisma.paperItem.findMany({
       orderBy: { name: "asc" },
@@ -30,20 +32,28 @@ export default async function AdminPage() {
     }),
   ]);
 
-  // Join school/meal/ageGroup names for audit entries
-  const [schools, mealsLookup, ageGroupsLookup] = await Promise.all([
+  // Join school/meal/ageGroup/menu names for audit entries
+  const auditSchoolMenuIds = [...new Set(auditRaw.map((e) => e.schoolMenuId))];
+  const [schools, mealsLookup, ageGroupsLookup, auditMenus] = await Promise.all([
     prisma.school.findMany({ select: { id: true, name: true } }),
     prisma.meal.findMany({ select: { id: true, name: true } }),
     prisma.ageGroup.findMany({ select: { id: true, name: true } }),
+    auditSchoolMenuIds.length > 0
+      ? prisma.schoolMenu.findMany({
+          where: { id: { in: auditSchoolMenuIds } },
+          include: { menu: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
   ]);
   const schoolMap = Object.fromEntries(schools.map((s) => [s.id, s.name]));
   const mealMap = Object.fromEntries(mealsLookup.map((m) => [m.id, m.name]));
   const ageMap = Object.fromEntries(ageGroupsLookup.map((a) => [a.id, a.name]));
+  const menuNameMap = Object.fromEntries(auditMenus.map((sm) => [sm.id, sm.menu.name]));
 
   const auditEntries = auditRaw.map((e) => ({
     id: e.id,
     schoolName: schoolMap[e.schoolId] ?? String(e.schoolId),
-    date: e.date,
+    menuName: menuNameMap[e.schoolMenuId] ?? String(e.schoolMenuId),
     mealName: mealMap[e.mealId] ?? String(e.mealId),
     ageGroupName: ageMap[e.ageGroupId] ?? String(e.ageGroupId),
     oldCount: e.oldCount,

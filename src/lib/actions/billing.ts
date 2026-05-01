@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { schoolDeliversOn } from "@/lib/cycle";
 
 // ─── Billing Groups ───────────────────────────────────────────────────────────
 
@@ -78,9 +79,35 @@ export async function createBillingRun(deliveryDate: Date) {
   const date = new Date(deliveryDate);
   date.setHours(0, 0, 0, 0);
 
-  // Get all kid counts for this date
+  // Find schools delivering on this date and their active menus
+  const [schoolMenus, closings] = await Promise.all([
+    prisma.schoolMenu.findMany({
+      where: {
+        startDate: { lte: date },
+        OR: [{ endDate: null }, { endDate: { gte: date } }],
+      },
+      include: { school: true },
+      orderBy: { startDate: "desc" },
+    }),
+    prisma.schoolClosing.findMany({
+      where: { startDate: { lte: date }, endDate: { gte: date } },
+      select: { schoolId: true },
+    }),
+  ]);
+
+  const closedIds = new Set(closings.map((c) => c.schoolId));
+  const activeMenuIds: number[] = [];
+  for (const sm of schoolMenus) {
+    if (closedIds.has(sm.schoolId)) continue;
+    if (!schoolDeliversOn(sm.school, date)) continue;
+    activeMenuIds.push(sm.id);
+  }
+
   const kidCounts = await prisma.kidCount.findMany({
-    where: { date, count: { gt: 0 } },
+    where: {
+      schoolMenuId: activeMenuIds.length > 0 ? { in: activeMenuIds } : { in: [-1] },
+      count: { gt: 0 },
+    },
   });
 
   if (kidCounts.length === 0) throw new Error("No kid counts found for this date.");
@@ -88,21 +115,10 @@ export async function createBillingRun(deliveryDate: Date) {
   // Get prices for each kid count
   const details = [];
   for (const kc of kidCounts) {
-    // Find the active school menu for this school on this date
-    const schoolMenu = await prisma.schoolMenu.findFirst({
-      where: {
-        schoolId: kc.schoolId,
-        startDate: { lte: date },
-        OR: [{ endDate: null }, { endDate: { gte: date } }],
-      },
-      orderBy: { startDate: "desc" },
-    });
-    if (!schoolMenu) continue;
-
     const price = await prisma.mealPrice.findUnique({
       where: {
         schoolMenuId_schoolId_mealId_ageGroupId: {
-          schoolMenuId: schoolMenu.id,
+          schoolMenuId: kc.schoolMenuId,
           schoolId: kc.schoolId,
           mealId: kc.mealId,
           ageGroupId: kc.ageGroupId,

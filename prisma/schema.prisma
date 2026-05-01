@@ -27,6 +27,7 @@ model AgeGroup {
   startAge     Int
   endAge       Int
   kidCounts    KidCount[]
+  milkCounts   MilkCount[]
   mealPrices   MealPrice[]
   servingSizes ServingSize[]
 }
@@ -88,18 +89,20 @@ model School {
   notes          String?
   active         Boolean              @default(true)
   milkTier       String               @default("medium") @db.VarChar(10)
-  route          Route?               @relation(fields: [routeId], references: [id])
-  county         County?              @relation(fields: [countyId], references: [id])
-  schoolMenus    SchoolMenu[]
-  kidCounts      KidCount[]
-  mealPrices     MealPrice[]
-  schoolClosings SchoolClosing[]
-  billingGroups  BillingSchoolGroup[]
-  milkCounts     MilkCount[]
-  paperGroups    SchoolPaperGroup[]
-  paperComment   SchoolPaperComment?
-  paperOverrides PaperOverride[]
-  paperRunAmounts PaperRunSchoolAmount[]
+  route            Route?                 @relation(fields: [routeId], references: [id])
+  county           County?                @relation(fields: [countyId], references: [id])
+  schoolMenus      SchoolMenu[]
+  kidCounts        KidCount[]
+  mealPrices       MealPrice[]
+  schoolClosings   SchoolClosing[]
+  billingGroups    BillingSchoolGroup[]
+  milkCounts       MilkCount[]
+  paperGroups      SchoolPaperGroup[]
+  paperComment     SchoolPaperComment?
+  paperOverrides   PaperOverride[]
+  paperRunAmounts  PaperRunSchoolAmount[]
+  productionMenus  ProductionMenu[]
+  productionMilks  ProductionMilk[]
 }
 
 // ─── Food Catalog ─────────────────────────────────────────────────────────────
@@ -116,12 +119,14 @@ model Container {
 }
 
 model ContainerSize {
-  id           Int       @id @default(autoincrement())
-  containerId  Int
-  name         String    @db.VarChar(50)
-  abbreviation String    @db.VarChar(50)
-  size         Decimal   @db.Decimal(10, 4)
-  container    Container @relation(fields: [containerId], references: [id])
+  id                   Int                       @id @default(autoincrement())
+  containerId          Int
+  name                 String                    @db.VarChar(50)
+  abbreviation         String                    @db.VarChar(50)
+  size                 Decimal                   @db.Decimal(10, 4)
+  container            Container                 @relation(fields: [containerId], references: [id])
+  productionContainers ProductionContainer[]
+  productionMilkContainers ProductionMilkContainer[]
 }
 
 model FoodItem {
@@ -138,10 +143,12 @@ model FoodItem {
   containerStrategy  String         @default("LeastContainers") @db.VarChar(20)
   pkSize             Int?
   pkUnit             String?        @db.VarChar(50)
-  container          Container?     @relation(fields: [defaultContainerId], references: [id])
+  container          Container?        @relation(fields: [defaultContainerId], references: [id])
   servingSizes       ServingSize[]
   menuItems          MenuItem[]
   milkOverrides      MilkOverride[]
+  productionAmts     ProductionAmt[]
+  productionMilks    ProductionMilk[]
 }
 
 model ServingSize {
@@ -167,9 +174,10 @@ model Menu {
   isBoxMenu     Boolean      @default(false)
   delaySnack    Boolean      @default(false)
   menuTypeId    Int?
-  items         MenuItem[]
-  schoolMenus   SchoolMenu[]
-  paperItems    MenuPaperItem[]
+  items           MenuItem[]
+  schoolMenus     SchoolMenu[]
+  paperItems      MenuPaperItem[]
+  productionMenus ProductionMenu[]
 }
 
 model MenuItem {
@@ -194,9 +202,12 @@ model SchoolMenu {
   endDate       DateTime?      @db.Date
   school        School         @relation(fields: [schoolId], references: [id])
   menu          Menu           @relation(fields: [menuId], references: [id])
-  kidCounts     KidCount[]
-  mealPrices    MealPrice[]
-  milkOverrides MilkOverride[]
+  kidCounts       KidCount[]
+  milkCounts      MilkCount[]
+  mealPrices      MealPrice[]
+  milkOverrides   MilkOverride[]
+  productionMenus ProductionMenu[]
+  productionMilks ProductionMilk[]
 }
 
 model SchoolClosing {
@@ -213,7 +224,6 @@ model KidCount {
   id           Int         @id @default(autoincrement())
   schoolId     Int
   schoolMenuId Int
-  date         DateTime    @db.Date
   mealId       Int
   ageGroupId   Int
   count        Int
@@ -223,30 +233,33 @@ model KidCount {
   meal         Meal        @relation(fields: [mealId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   ageGroup     AgeGroup    @relation(fields: [ageGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@unique([schoolId, date, mealId, ageGroupId])
-  @@index([date])
-  @@index([schoolId, date])
+  @@unique([schoolMenuId, mealId, ageGroupId])
+  @@index([schoolMenuId])
 }
 
 model MilkType {
-  id         Int         @id
-  name       String      @db.VarChar(50)
-  labelColor String      @db.VarChar(50)
-  milkCounts MilkCount[]
+  id              Int              @id
+  name            String           @db.VarChar(50)
+  labelColor      String           @db.VarChar(50)
+  milkCounts      MilkCount[]
+  productionMilks ProductionMilk[]
 }
 
 model MilkCount {
-  id         Int      @id @default(autoincrement())
-  schoolId   Int
-  date       DateTime @db.Date
-  mealId     Int
-  milkTypeId Int
-  count      Int      @default(0)
-  school     School   @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  milkType   MilkType @relation(fields: [milkTypeId], references: [id])
+  id           Int        @id @default(autoincrement())
+  schoolId     Int
+  schoolMenuId Int
+  mealId       Int
+  ageGroupId   Int
+  milkTypeId   Int
+  count        Int        @default(0)
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schoolMenu   SchoolMenu @relation(fields: [schoolMenuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ageGroup     AgeGroup   @relation(fields: [ageGroupId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  milkType     MilkType   @relation(fields: [milkTypeId], references: [id])
 
-  @@unique([schoolId, date, mealId, milkTypeId])
-  @@index([schoolId, date])
+  @@unique([schoolMenuId, mealId, ageGroupId, milkTypeId])
+  @@index([schoolMenuId])
 }
 
 // ─── Billing ──────────────────────────────────────────────────────────────────
@@ -314,19 +327,19 @@ model BillingRunDetail {
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 
 model KidCountAudit {
-  id         Int      @id @default(autoincrement())
-  schoolId   Int
-  date       DateTime @db.Date
-  mealId     Int
-  ageGroupId Int
-  oldCount   Int
-  newCount   Int
-  userId     String
-  changedAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
+  id           Int      @id @default(autoincrement())
+  schoolId     Int
+  schoolMenuId Int
+  mealId       Int
+  ageGroupId   Int
+  oldCount     Int
+  newCount     Int
+  userId       String
+  changedAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
 
-  @@index([date])
-  @@index([schoolId, date])
+  @@index([schoolMenuId])
+  @@index([schoolId])
 }
 
 // ─── Paper Goods ─────────────────────────────────────────────────────────────
@@ -467,6 +480,99 @@ model PaperContainer {
   containerSize Int
   paper         PaperItem @relation(fields: [paperId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   paperSize     PaperSize @relation(fields: [paperSizeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+// ─── Production ──────────────────────────────────────────────────────────────
+
+model Production {
+  id             Int               @id @default(autoincrement())
+  productionDate DateTime          @db.Date
+  deliveryDate   DateTime          @db.Date
+  servingDateLSD DateTime          @db.Date
+  servingDateB   DateTime          @db.Date
+  createdAt      DateTime          @default(now())
+  menus          ProductionMenu[]
+  milks          ProductionMilk[]
+
+  @@unique([productionDate])
+}
+
+model ProductionMenu {
+  id           Int                  @id @default(autoincrement())
+  productionId Int
+  schoolId     Int
+  menuId       Int
+  schoolMenuId Int
+  isBoxMenu    Boolean              @default(false)
+  week         Int
+  dayId        Int
+  isLSD        Boolean              @default(false)
+  isTomB       Boolean              @default(false)
+  production   Production           @relation(fields: [productionId], references: [id])
+  school       School               @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  menu         Menu                 @relation(fields: [menuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  schoolMenu   SchoolMenu           @relation(fields: [schoolMenuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  amounts      ProductionAmt[]
+
+  @@index([productionId])
+  @@index([schoolId])
+}
+
+model ProductionAmt {
+  id               Int                    @id @default(autoincrement())
+  productionMenuId Int
+  foodItemId       Int
+  mealId           Int
+  foodAmt          Decimal                @db.Decimal(10, 4)
+  productionMenu   ProductionMenu         @relation(fields: [productionMenuId], references: [id])
+  foodItem         FoodItem               @relation(fields: [foodItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  containers       ProductionContainer[]
+
+  @@index([productionMenuId])
+}
+
+model ProductionContainer {
+  id               Int           @id @default(autoincrement())
+  productionAmtId  Int
+  containerSizeId  Int
+  containerCount   Int
+  partialQty       Decimal?      @db.Decimal(10, 4)
+  productionAmt    ProductionAmt @relation(fields: [productionAmtId], references: [id])
+  containerSize    ContainerSize @relation(fields: [containerSizeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([productionAmtId])
+}
+
+model ProductionMilk {
+  id               Int                         @id @default(autoincrement())
+  productionId     Int
+  schoolMenuId     Int
+  schoolId         Int
+  foodItemId       Int
+  milkTypeId       Int
+  foodAmt          Decimal                     @db.Decimal(10, 4)
+  production       Production                  @relation(fields: [productionId], references: [id])
+  schoolMenu       SchoolMenu                  @relation(fields: [schoolMenuId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  school           School                      @relation(fields: [schoolId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  foodItem         FoodItem                    @relation(fields: [foodItemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  milkType         MilkType                    @relation(fields: [milkTypeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  containers       ProductionMilkContainer[]
+
+  @@index([productionId])
+  @@index([schoolMenuId])
+}
+
+model ProductionMilkContainer {
+  id               Int            @id @default(autoincrement())
+  productionMilkId Int
+  containerSizeId  Int
+  containerCount   Int
+  oldContainerCount Int           @default(0)
+  partialQty       Decimal?       @db.Decimal(10, 4)
+  productionMilk   ProductionMilk @relation(fields: [productionMilkId], references: [id])
+  containerSize    ContainerSize  @relation(fields: [containerSizeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([productionMilkId])
 }
 
 // ─── Milk Overrides ───────────────────────────────────────────────────────────

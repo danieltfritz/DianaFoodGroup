@@ -1,6 +1,77 @@
 import { prisma } from "@/lib/db";
-import { getCycleWeek, getDayId } from "@/lib/cycle";
+import { getCycleWeek, getDayId, schoolDeliversOn } from "@/lib/cycle";
 import { packContainers, type PackResult, type ContainerSizeInput } from "@/lib/containers";
+
+// ─── Shared helper ────────────────────────────────────────────────────────────
+
+type DeliverySchoolMenu = {
+  id: number;
+  schoolId: number;
+  menuId: number;
+  school: {
+    id: number;
+    name: string;
+    routeId: number | null;
+    milkTier: string;
+    deliveryMon: boolean;
+    deliveryTue: boolean;
+    deliveryWed: boolean;
+    deliveryThu: boolean;
+    deliveryFri: boolean;
+    deliverySat: boolean;
+    deliverySun: boolean;
+    route: { id: number; name: string; driver: string | null } | null;
+    billingGroups: { billingGroup: { name: string } }[];
+    address: string | null;
+    city: string | null;
+    postalCode: string | null;
+    phone: string | null;
+  };
+  menu: {
+    id: number;
+    name: string;
+    cycleWeeks: number;
+    effectiveDate: Date;
+    isBoxMenu: boolean;
+    delaySnack: boolean;
+  };
+};
+
+async function getDeliverySchoolMenus(date: Date): Promise<DeliverySchoolMenu[]> {
+  const [schoolMenus, closings] = await Promise.all([
+    prisma.schoolMenu.findMany({
+      where: {
+        startDate: { lte: date },
+        OR: [{ endDate: null }, { endDate: { gte: date } }],
+      },
+      include: {
+        school: {
+          include: {
+            route: true,
+            billingGroups: { include: { billingGroup: true } },
+          },
+        },
+        menu: true,
+      },
+      orderBy: { startDate: "desc" },
+    }),
+    prisma.schoolClosing.findMany({
+      where: { startDate: { lte: date }, endDate: { gte: date } },
+      select: { schoolId: true },
+    }),
+  ]);
+
+  const closedIds = new Set(closings.map((c) => c.schoolId));
+  const result: DeliverySchoolMenu[] = [];
+
+  for (const sm of schoolMenus) {
+    if (closedIds.has(sm.schoolId)) continue;
+    if (!schoolDeliversOn(sm.school, date)) continue;
+    result.push(sm as DeliverySchoolMenu);
+  }
+
+  return result;
+}
 
 // ─── School Summary ───────────────────────────────────────────────────────────
 
@@ -19,38 +90,31 @@ export type SchoolSummaryRow = {
 };
 
 export async function getSchoolSummary(deliveryDate: Date): Promise<SchoolSummaryRow[]> {
-  const date = deliveryDate;
-  const [kidCounts, closings, meals, ageGroups] = await Promise.all([
-    prisma.kidCount.findMany({
-      where: { date, count: { gt: 0 } },
-      include: {
-        school: { include: { route: true } },
-        meal: true,
-        ageGroup: true,
-      },
-      orderBy: [{ school: { name: "asc" } }, { meal: { id: "asc" } }],
-    }),
-    prisma.schoolClosing.findMany({
-      where: { startDate: { lte: date }, endDate: { gte: date } },
-      select: { schoolId: true },
-    }),
+  const [deliveryMenus, meals, ageGroups] = await Promise.all([
+    getDeliverySchoolMenus(deliveryDate),
     prisma.meal.findMany({ orderBy: { id: "asc" } }),
     prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
   ]);
 
-  const closedIds = new Set(closings.map((c) => c.schoolId));
+  if (deliveryMenus.length === 0) return [];
 
-  // Group by school
+  const schoolMenuIds = deliveryMenus.map((dm) => dm.id);
+  const kidCounts = await prisma.kidCount.findMany({
+    where: { schoolMenuId: { in: schoolMenuIds }, count: { gt: 0 } },
+  });
+
+  const smMap = new Map(deliveryMenus.map((dm) => [dm.id, dm]));
   const schoolMap = new Map<number, SchoolSummaryRow>();
 
   for (const kc of kidCounts) {
+    const dm = smMap.get(kc.schoolMenuId)!;
     let row = schoolMap.get(kc.schoolId);
     if (!row) {
       row = {
         schoolId: kc.schoolId,
-        schoolName: kc.school.name,
-        route: kc.school.route?.name ?? null,
-        isClosed: closedIds.has(kc.schoolId),
+        schoolName: dm.school.name,
+        route: dm.school.route?.name ?? null,
+        isClosed: false,
         meals: meals.map((m) => ({
           mealId: m.id,
           mealName: m.name,
@@ -95,24 +159,15 @@ export type ContainerRow = {
 export async function getContainerReport(deliveryDate: Date): Promise<ContainerRow[]> {
   const date = deliveryDate;
   const dayId = getDayId(date);
+  const deliveryMenus = await getDeliverySchoolMenus(date);
+  if (deliveryMenus.length === 0) return [];
 
-  const closedIds = (
-    await prisma.schoolClosing.findMany({
-      where: { startDate: { lte: date }, endDate: { gte: date } },
-      select: { schoolId: true },
-    })
-  ).map((c) => c.schoolId);
-
+  const schoolMenuIds = deliveryMenus.map((dm) => dm.id);
   const kidCounts = await prisma.kidCount.findMany({
-    where: {
-      date,
-      schoolId: { notIn: closedIds.length > 0 ? closedIds : [-1] },
-      count: { gt: 0 },
-    },
-    include: { schoolMenu: { include: { menu: true } } },
+    where: { schoolMenuId: { in: schoolMenuIds }, count: { gt: 0 } },
   });
 
-  if (kidCounts.length === 0) return [];
+  const smMap = new Map(deliveryMenus.map((dm) => [dm.id, dm]));
 
   const foodTotals = new Map<
     number,
@@ -120,7 +175,8 @@ export async function getContainerReport(deliveryDate: Date): Promise<ContainerR
   >();
 
   for (const kc of kidCounts) {
-    const menu = kc.schoolMenu.menu;
+    const dm = smMap.get(kc.schoolMenuId)!;
+    const menu = dm.menu;
     const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
 
     const menuItems = await prisma.menuItem.findMany({
@@ -188,11 +244,11 @@ export type MilkItem = {
   foodId: number;
   foodName: string;
   mealName: string;
-  rawAmount: number;       // oz from kid counts × serving sizes
-  pkSize: number | null;   // oz per container unit
+  rawAmount: number;
+  pkSize: number | null;
   pkUnit: string | null;
-  orderedUnits: number | null; // containers to order after overage + rounding
-  orderedAmount: number;   // oz after overage, rounded up to nearest pkSize
+  orderedUnits: number | null;
+  orderedAmount: number;
 };
 
 export type MilkSchoolRow = {
@@ -200,35 +256,22 @@ export type MilkSchoolRow = {
   schoolName: string;
   route: string | null;
   milkTier: string;
-  overagePct: number; // e.g. 50 for 50%
+  overagePct: number;
   items: MilkItem[];
 };
 
 export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]> {
   const date = deliveryDate;
   const dayId = getDayId(date);
+  const deliveryMenus = await getDeliverySchoolMenus(date);
+  if (deliveryMenus.length === 0) return [];
 
-  const closedIds = (
-    await prisma.schoolClosing.findMany({
-      where: { startDate: { lte: date }, endDate: { gte: date } },
-      select: { schoolId: true },
-    })
-  ).map((c) => c.schoolId);
-
+  const schoolMenuIds = deliveryMenus.map((dm) => dm.id);
   const kidCounts = await prisma.kidCount.findMany({
-    where: {
-      date,
-      schoolId: { notIn: closedIds.length > 0 ? closedIds : [-1] },
-      count: { gt: 0 },
-    },
-    include: {
-      school: { include: { route: true } },
-      schoolMenu: { include: { menu: true } },
-      meal: true,
-    },
+    where: { schoolMenuId: { in: schoolMenuIds }, count: { gt: 0 } },
   });
 
-  if (kidCounts.length === 0) return [];
+  const smMap = new Map(deliveryMenus.map((dm) => [dm.id, dm]));
 
   type SchoolAcc = {
     schoolName: string;
@@ -240,7 +283,8 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
   const schoolMap = new Map<number, SchoolAcc>();
 
   for (const kc of kidCounts) {
-    const menu = kc.schoolMenu.menu;
+    const dm = smMap.get(kc.schoolMenuId)!;
+    const menu = dm.menu;
     const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
 
     const milkItems = await prisma.menuItem.findMany({
@@ -270,9 +314,9 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
       let schoolRow = schoolMap.get(kc.schoolId);
       if (!schoolRow) {
         schoolRow = {
-          schoolName: kc.school.name,
-          route: kc.school.route?.name ?? null,
-          milkTier: kc.school.milkTier,
+          schoolName: dm.school.name,
+          route: dm.school.route?.name ?? null,
+          milkTier: dm.school.milkTier,
           items: new Map(),
         };
         schoolMap.set(kc.schoolId, schoolRow);
@@ -286,7 +330,7 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
         schoolRow.items.set(key, {
           foodId: mi.foodItemId,
           foodName: mi.foodItem.name,
-          mealName: kc.meal.name,
+          mealName: kc.mealId.toString(),
           rawAmount: amount,
           pkSize: mi.foodItem.pkSize,
           pkUnit: mi.foodItem.pkUnit,
@@ -300,20 +344,18 @@ export async function getMilkReport(deliveryDate: Date): Promise<MilkSchoolRow[]
       const multiplier = MILK_OVERAGE[milkTier] ?? MILK_OVERAGE.medium;
       const overagePct = Math.round((multiplier - 1) * 100);
 
-      const milkItems: MilkItem[] = Array.from(items.values())
+      const milkItemRows: MilkItem[] = Array.from(items.values())
         .sort((a, b) => a.mealName.localeCompare(b.mealName) || a.foodName.localeCompare(b.foodName))
         .map((item) => {
           const afterOverage = item.rawAmount * multiplier;
-          const orderedUnits = item.pkSize
-            ? Math.ceil(afterOverage / item.pkSize)
-            : null;
+          const orderedUnits = item.pkSize ? Math.ceil(afterOverage / item.pkSize) : null;
           const orderedAmount = orderedUnits && item.pkSize
             ? orderedUnits * item.pkSize
             : Math.ceil(afterOverage);
           return { ...item, orderedUnits, orderedAmount };
         });
 
-      return { schoolId, schoolName, route, milkTier, overagePct, items: milkItems };
+      return { schoolId, schoolName, route, milkTier, overagePct, items: milkItemRows };
     })
     .sort((a, b) => (a.route ?? "zzz").localeCompare(b.route ?? "zzz") || a.schoolName.localeCompare(b.schoolName));
 }
@@ -334,7 +376,6 @@ export type FruitReportRow = {
 };
 
 export async function getFruitReport(startDate: Date, endDate: Date): Promise<FruitReportRow[]> {
-  // Identify fruit food type IDs
   const fruitTypes = await prisma.foodType.findMany({
     where: { name: { contains: "fruit" } },
     select: { id: true },
@@ -342,85 +383,91 @@ export async function getFruitReport(startDate: Date, endDate: Date): Promise<Fr
   if (fruitTypes.length === 0) return [];
   const fruitTypeIds = fruitTypes.map((t) => t.id);
 
-  const kidCounts = await prisma.kidCount.findMany({
-    where: { date: { gte: startDate, lte: endDate }, count: { gt: 0 } },
-    include: {
-      school: { include: { route: true } },
-      schoolMenu: { include: { menu: true } },
-    },
-    orderBy: [{ date: "asc" }, { school: { name: "asc" } }],
-  });
+  const results: FruitReportRow[] = [];
+  const current = new Date(startDate);
 
-  if (kidCounts.length === 0) return [];
+  while (current <= endDate) {
+    const date = new Date(current);
+    const deliveryMenus = await getDeliverySchoolMenus(date);
 
-  // Key: date-ISO + schoolId
-  type RowAcc = {
-    date: Date;
-    schoolName: string;
-    route: string | null;
-    items: Map<number, FruitItem>;
-  };
-  const rowMap = new Map<string, RowAcc>();
-
-  for (const kc of kidCounts) {
-    const menu = kc.schoolMenu.menu;
-    const dayId = getDayId(kc.date);
-    const cycleWeek = getCycleWeek(kc.date, menu.effectiveDate, menu.cycleWeeks);
-
-    const fruitMenuItems = await prisma.menuItem.findMany({
-      where: {
-        menuId: menu.id,
-        mealId: kc.mealId,
-        week: cycleWeek,
-        dayId,
-        foodItem: { foodTypeId: { in: fruitTypeIds } },
-      },
-      include: { foodItem: true },
-    });
-
-    if (fruitMenuItems.length === 0) continue;
-
-    const key = `${kc.date.toISOString().split("T")[0]}-${kc.schoolId}`;
-    let row = rowMap.get(key);
-    if (!row) {
-      row = {
-        date: kc.date,
-        schoolName: kc.school.name,
-        route: kc.school.route?.name ?? null,
-        items: new Map(),
-      };
-      rowMap.set(key, row);
-    }
-
-    for (const mi of fruitMenuItems) {
-      const ss = await prisma.servingSize.findUnique({
-        where: {
-          mealId_foodItemId_ageGroupId: {
-            mealId: kc.mealId,
-            foodItemId: mi.foodItemId,
-            ageGroupId: kc.ageGroupId,
-          },
-        },
+    if (deliveryMenus.length > 0) {
+      const schoolMenuIds = deliveryMenus.map((dm) => dm.id);
+      const kidCounts = await prisma.kidCount.findMany({
+        where: { schoolMenuId: { in: schoolMenuIds }, count: { gt: 0 } },
       });
-      if (!ss) continue;
+      const dayId = getDayId(date);
+      const smMap = new Map(deliveryMenus.map((dm) => [dm.id, dm]));
 
-      const amount = kc.count * Number(ss.servingSize);
-      const existing = row.items.get(mi.foodItemId);
-      if (existing) {
-        existing.totalAmount += amount;
-      } else {
-        row.items.set(mi.foodItemId, {
-          foodName: mi.foodItem.name,
-          totalAmount: amount,
-          pkUnit: mi.foodItem.pkUnit,
+      type RowAcc = { date: Date; schoolName: string; route: string | null; items: Map<number, FruitItem> };
+      const rowMap = new Map<string, RowAcc>();
+
+      for (const kc of kidCounts) {
+        const dm = smMap.get(kc.schoolMenuId)!;
+        const menu = dm.menu;
+        const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
+
+        const fruitMenuItems = await prisma.menuItem.findMany({
+          where: {
+            menuId: menu.id,
+            mealId: kc.mealId,
+            week: cycleWeek,
+            dayId,
+            foodItem: { foodTypeId: { in: fruitTypeIds } },
+          },
+          include: { foodItem: true },
         });
+
+        if (fruitMenuItems.length === 0) continue;
+
+        const key = `${date.toISOString().split("T")[0]}-${kc.schoolId}`;
+        let row = rowMap.get(key);
+        if (!row) {
+          row = {
+            date,
+            schoolName: dm.school.name,
+            route: dm.school.route?.name ?? null,
+            items: new Map(),
+          };
+          rowMap.set(key, row);
+        }
+
+        for (const mi of fruitMenuItems) {
+          const ss = await prisma.servingSize.findUnique({
+            where: {
+              mealId_foodItemId_ageGroupId: {
+                mealId: kc.mealId,
+                foodItemId: mi.foodItemId,
+                ageGroupId: kc.ageGroupId,
+              },
+            },
+          });
+          if (!ss) continue;
+
+          const amount = kc.count * Number(ss.servingSize);
+          const existing = row.items.get(mi.foodItemId);
+          if (existing) {
+            existing.totalAmount += amount;
+          } else {
+            row.items.set(mi.foodItemId, {
+              foodName: mi.foodItem.name,
+              totalAmount: amount,
+              pkUnit: mi.foodItem.pkUnit,
+            });
+          }
+        }
       }
+
+      results.push(
+        ...Array.from(rowMap.values())
+          .filter((r) => r.items.size > 0)
+          .map((r) => ({ ...r, items: Array.from(r.items.values()) }))
+      );
     }
+
+    current.setDate(current.getDate() + 1);
   }
 
-  return Array.from(rowMap.values())
-    .filter((r) => r.items.size > 0)
-    .map((r) => ({ ...r, items: Array.from(r.items.values()) }));
+  return results;
 }
 
 // ─── Item Report ──────────────────────────────────────────────────────────────
@@ -445,27 +492,15 @@ export type ItemReportSection = {
 export async function getItemReport(deliveryDate: Date): Promise<ItemReportSection[]> {
   const date = deliveryDate;
   const dayId = getDayId(date);
+  const deliveryMenus = await getDeliverySchoolMenus(date);
+  if (deliveryMenus.length === 0) return [];
 
-  const closedIds = (
-    await prisma.schoolClosing.findMany({
-      where: { startDate: { lte: date }, endDate: { gte: date } },
-      select: { schoolId: true },
-    })
-  ).map((c) => c.schoolId);
-
+  const schoolMenuIds = deliveryMenus.map((dm) => dm.id);
   const kidCounts = await prisma.kidCount.findMany({
-    where: {
-      date,
-      schoolId: { notIn: closedIds.length > 0 ? closedIds : [-1] },
-      count: { gt: 0 },
-    },
-    include: {
-      school: true,
-      schoolMenu: { include: { menu: true } },
-    },
+    where: { schoolMenuId: { in: schoolMenuIds }, count: { gt: 0 } },
   });
 
-  if (kidCounts.length === 0) return [];
+  const smMap = new Map(deliveryMenus.map((dm) => [dm.id, dm]));
 
   type FoodSchoolAcc = { schoolName: string; totalAmount: number };
   type FoodAcc = {
@@ -483,7 +518,8 @@ export async function getItemReport(deliveryDate: Date): Promise<ItemReportSecti
   const foodMap = new Map<number, FoodAcc>();
 
   for (const kc of kidCounts) {
-    const menu = kc.schoolMenu.menu;
+    const dm = smMap.get(kc.schoolMenuId)!;
+    const menu = dm.menu;
     const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
 
     const menuItems = await prisma.menuItem.findMany({
@@ -541,7 +577,7 @@ export async function getItemReport(deliveryDate: Date): Promise<ItemReportSecti
       if (schoolAcc) {
         schoolAcc.totalAmount += amount;
       } else {
-        foodAcc.schools.set(kc.schoolId, { schoolName: kc.school.name, totalAmount: amount });
+        foodAcc.schools.set(kc.schoolId, { schoolName: dm.school.name, totalAmount: amount });
       }
     }
   }
@@ -573,6 +609,9 @@ export async function getItemReport(deliveryDate: Date): Promise<ItemReportSecti
 // ─── Milk Count Report ───────────────────────────────────────────────────────
 
 export type MilkCountColumn = {
+  key: string; // `${ageGroupId}-${milkTypeId}`
+  ageGroupId: number;
+  ageGroupName: string;
   milkTypeId: number;
   name: string;
   labelColor: string;
@@ -581,42 +620,60 @@ export type MilkCountColumn = {
 export type MilkCountSchoolRow = {
   schoolId: number;
   schoolName: string;
-  counts: Record<number, number>;
+  counts: Record<string, number>;
 };
 
 export type MilkCountRouteGroup = {
   routeId: number | null;
   routeName: string;
   schools: MilkCountSchoolRow[];
-  totals: Record<number, number>;
+  totals: Record<string, number>;
 };
 
 export type MilkCountReportData = {
   columns: MilkCountColumn[];
   routes: MilkCountRouteGroup[];
-  grandTotals: Record<number, number>;
+  grandTotals: Record<string, number>;
 };
 
 export async function getMilkCountReport(deliveryDate: Date): Promise<MilkCountReportData> {
-  const records = await prisma.milkCount.findMany({
-    where: { date: deliveryDate, count: { gt: 0 } },
-    include: {
-      school: { include: { route: true } },
-      milkType: true,
-    },
-    orderBy: [{ school: { route: { name: "asc" } } }, { school: { name: "asc" } }],
-  });
+  const deliveryMenus = await getDeliverySchoolMenus(deliveryDate);
+  const schoolMenuIds = deliveryMenus.map((dm) => dm.id);
+  const smMap = new Map(deliveryMenus.map((dm) => [dm.id, dm]));
 
-  const columnMap = new Map<number, MilkCountColumn>();
-  const routeMap = new Map<number | null, { routeName: string; schoolMap: Map<number, { schoolId: number; schoolName: string; counts: Map<number, number> }> }>();
+  const [records, milkTypes, ageGroups] = await Promise.all([
+    prisma.milkCount.findMany({
+      where: {
+        schoolMenuId: schoolMenuIds.length > 0 ? { in: schoolMenuIds } : { in: [-1] },
+        count: { gt: 0 },
+      },
+      include: { milkType: true },
+      orderBy: [{ schoolId: "asc" }],
+    }),
+    prisma.milkType.findMany(),
+    prisma.ageGroup.findMany(),
+  ]);
+  const ageGroupMap = new Map(ageGroups.map((a) => [a.id, a.name]));
+
+  const columnMap = new Map<string, MilkCountColumn>();
+  const routeMap = new Map<number | null, { routeName: string; schoolMap: Map<number, { schoolId: number; schoolName: string; counts: Map<string, number> }> }>();
 
   for (const r of records) {
-    if (!columnMap.has(r.milkTypeId)) {
-      columnMap.set(r.milkTypeId, { milkTypeId: r.milkTypeId, name: r.milkType.name, labelColor: r.milkType.labelColor });
+    const colKey = `${r.ageGroupId}-${r.milkTypeId}`;
+    if (!columnMap.has(colKey)) {
+      columnMap.set(colKey, {
+        key: colKey,
+        ageGroupId: r.ageGroupId,
+        ageGroupName: ageGroupMap.get(r.ageGroupId) ?? String(r.ageGroupId),
+        milkTypeId: r.milkTypeId,
+        name: r.milkType.name,
+        labelColor: r.milkType.labelColor,
+      });
     }
 
-    const routeId = r.school.routeId;
-    const routeName = r.school.route?.name ?? "No Route";
+    const dm = smMap.get(r.schoolMenuId);
+    const routeId = dm?.school.routeId ?? null;
+    const routeName = dm?.school.route?.name ?? "No Route";
 
     let routeAcc = routeMap.get(routeId);
     if (!routeAcc) {
@@ -626,14 +683,16 @@ export async function getMilkCountReport(deliveryDate: Date): Promise<MilkCountR
 
     let schoolAcc = routeAcc.schoolMap.get(r.schoolId);
     if (!schoolAcc) {
-      schoolAcc = { schoolId: r.schoolId, schoolName: r.school.name, counts: new Map() };
+      schoolAcc = { schoolId: r.schoolId, schoolName: dm?.school.name ?? String(r.schoolId), counts: new Map() };
       routeAcc.schoolMap.set(r.schoolId, schoolAcc);
     }
 
-    schoolAcc.counts.set(r.milkTypeId, (schoolAcc.counts.get(r.milkTypeId) ?? 0) + r.count);
+    schoolAcc.counts.set(colKey, (schoolAcc.counts.get(colKey) ?? 0) + r.count);
   }
 
-  const columns = Array.from(columnMap.values()).sort((a, b) => a.milkTypeId - b.milkTypeId);
+  const columns = Array.from(columnMap.values()).sort((a, b) =>
+    a.ageGroupId !== b.ageGroupId ? a.ageGroupId - b.ageGroupId : a.milkTypeId - b.milkTypeId
+  );
 
   const routes: MilkCountRouteGroup[] = Array.from(routeMap.entries())
     .sort(([, a], [, b]) => a.routeName.localeCompare(b.routeName))
@@ -642,20 +701,20 @@ export async function getMilkCountReport(deliveryDate: Date): Promise<MilkCountR
         .sort((a, b) => a.schoolName.localeCompare(b.schoolName))
         .map((s) => ({ schoolId: s.schoolId, schoolName: s.schoolName, counts: Object.fromEntries(s.counts) }));
 
-      const totals: Record<number, number> = {};
+      const totals: Record<string, number> = {};
       for (const s of schools) {
-        for (const [tid, cnt] of Object.entries(s.counts)) {
-          totals[Number(tid)] = (totals[Number(tid)] ?? 0) + cnt;
+        for (const [key, cnt] of Object.entries(s.counts)) {
+          totals[key] = (totals[key] ?? 0) + cnt;
         }
       }
 
       return { routeId, routeName: acc.routeName, schools, totals };
     });
 
-  const grandTotals: Record<number, number> = {};
+  const grandTotals: Record<string, number> = {};
   for (const route of routes) {
-    for (const [tid, cnt] of Object.entries(route.totals)) {
-      grandTotals[Number(tid)] = (grandTotals[Number(tid)] ?? 0) + cnt;
+    for (const [key, cnt] of Object.entries(route.totals)) {
+      grandTotals[key] = (grandTotals[key] ?? 0) + cnt;
     }
   }
 
@@ -690,7 +749,9 @@ export type DeliveryTicketMealCount = {
 
 export type DeliveryTicketMilkItem = {
   qty: number;
+  containerName: string;
   milkTypeName: string;
+  labelColor: string;
 };
 
 export type DeliveryTicket = {
@@ -720,37 +781,23 @@ export async function getDeliveryTickets(deliveryDate: Date): Promise<DeliveryTi
   const date = deliveryDate;
   const dayId = getDayId(date);
 
-  const [ageGroups, meals, closings] = await Promise.all([
+  const [ageGroups, meals, deliveryMenus] = await Promise.all([
     prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
     prisma.meal.findMany({ orderBy: { id: "asc" } }),
-    prisma.schoolClosing.findMany({
-      where: { startDate: { lte: date }, endDate: { gte: date } },
-      select: { schoolId: true },
-    }),
+    getDeliverySchoolMenus(date),
   ]);
 
-  const closedIds = closings.map((c) => c.schoolId);
+  if (deliveryMenus.length === 0) return [];
+
+  const schoolMenuIds = deliveryMenus.map((dm) => dm.id);
+  const smMap = new Map(deliveryMenus.map((dm) => [dm.id, dm]));
 
   const [kidCounts, milkCounts] = await Promise.all([
     prisma.kidCount.findMany({
-      where: {
-        date,
-        schoolId: { notIn: closedIds.length > 0 ? closedIds : [-1] },
-        count: { gt: 0 },
-      },
-      include: {
-        school: {
-          include: {
-            route: true,
-            billingGroups: { include: { billingGroup: true } },
-          },
-        },
-        schoolMenu: { include: { menu: true } },
-        meal: true,
-      },
+      where: { schoolMenuId: { in: schoolMenuIds }, count: { gt: 0 } },
     }),
     prisma.milkCount.findMany({
-      where: { date, count: { gt: 0 } },
+      where: { schoolMenuId: { in: schoolMenuIds }, count: { gt: 0 } },
       include: { milkType: true },
     }),
   ]);
@@ -770,8 +817,7 @@ export async function getDeliveryTickets(deliveryDate: Date): Promise<DeliveryTi
   };
 
   type SchoolAcc = {
-    school: typeof kidCounts[0]["school"];
-    menuName: string;
+    dm: DeliverySchoolMenu;
     mealCounts: Map<number, { mealName: string; counts: Map<number, number> }>;
     items: Map<string, ItemAcc>;
   };
@@ -779,25 +825,22 @@ export async function getDeliveryTickets(deliveryDate: Date): Promise<DeliveryTi
   const schoolMap = new Map<number, SchoolAcc>();
 
   for (const kc of kidCounts) {
+    const dm = smMap.get(kc.schoolMenuId)!;
     let acc = schoolMap.get(kc.schoolId);
     if (!acc) {
-      acc = {
-        school: kc.school,
-        menuName: kc.schoolMenu.menu.name,
-        mealCounts: new Map(),
-        items: new Map(),
-      };
+      acc = { dm, mealCounts: new Map(), items: new Map() };
       schoolMap.set(kc.schoolId, acc);
     }
 
+    const mealObj = meals.find((m) => m.id === kc.mealId);
     let mealCount = acc.mealCounts.get(kc.mealId);
     if (!mealCount) {
-      mealCount = { mealName: kc.meal.name, counts: new Map() };
+      mealCount = { mealName: mealObj?.name ?? String(kc.mealId), counts: new Map() };
       acc.mealCounts.set(kc.mealId, mealCount);
     }
     mealCount.counts.set(kc.ageGroupId, (mealCount.counts.get(kc.ageGroupId) ?? 0) + kc.count);
 
-    const menu = kc.schoolMenu.menu;
+    const menu = dm.menu;
     const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
 
     const menuItems = await prisma.menuItem.findMany({
@@ -831,7 +874,7 @@ export async function getDeliveryTickets(deliveryDate: Date): Promise<DeliveryTi
           foodId: mi.foodItemId,
           foodName: mi.foodItem.name,
           mealId: kc.mealId,
-          mealName: kc.meal.name,
+          mealName: mealObj?.name ?? String(kc.mealId),
           tempType: mi.foodItem.tempType,
           pkUnit: mi.foodItem.pkUnit,
           containerSizes: mi.foodItem.container?.sizes.map((s) => ({
@@ -852,20 +895,22 @@ export async function getDeliveryTickets(deliveryDate: Date): Promise<DeliveryTi
     }
   }
 
-  const milkBySchool = new Map<number, Map<number, { qty: number; milkTypeName: string }>>();
+  const ageGroupNameMap = new Map(ageGroups.map((a) => [a.id, a.name]));
+  const milkBySchool = new Map<number, Map<string, { qty: number; containerName: string; milkTypeName: string; labelColor: string }>>();
   for (const mc of milkCounts) {
     let schoolMilk = milkBySchool.get(mc.schoolId);
     if (!schoolMilk) { schoolMilk = new Map(); milkBySchool.set(mc.schoolId, schoolMilk); }
-    const existing = schoolMilk.get(mc.milkTypeId);
+    const colKey = `${mc.ageGroupId}-${mc.milkTypeId}`;
+    const existing = schoolMilk.get(colKey);
     if (existing) existing.qty += mc.count;
-    else schoolMilk.set(mc.milkTypeId, { qty: mc.count, milkTypeName: mc.milkType.name });
+    else schoolMilk.set(colKey, { qty: mc.count, containerName: ageGroupNameMap.get(mc.ageGroupId) ?? String(mc.ageGroupId), milkTypeName: mc.milkType.name, labelColor: mc.milkType.labelColor });
   }
 
   return Array.from(schoolMap.entries())
     .sort(([, a], [, b]) => {
-      const ra = a.school.route?.name ?? "zzz";
-      const rb = b.school.route?.name ?? "zzz";
-      return ra.localeCompare(rb) || a.school.name.localeCompare(b.school.name);
+      const ra = a.dm.school.route?.name ?? "zzz";
+      const rb = b.dm.school.route?.name ?? "zzz";
+      return ra.localeCompare(rb) || a.dm.school.name.localeCompare(b.dm.school.name);
     })
     .map(([schoolId, acc]) => {
       const mealCounts: DeliveryTicketMealCount[] = meals
@@ -922,15 +967,15 @@ export async function getDeliveryTickets(deliveryDate: Date): Promise<DeliveryTi
 
       return {
         schoolId,
-        schoolName: acc.school.name,
-        address: acc.school.address ?? null,
-        city: acc.school.city ?? null,
-        postalCode: acc.school.postalCode ?? null,
-        phone: acc.school.phone ?? null,
-        routeName: acc.school.route?.name ?? null,
-        driverName: acc.school.route?.driver ?? null,
-        billingGroupName: acc.school.billingGroups[0]?.billingGroup.name ?? null,
-        menuName: acc.menuName,
+        schoolName: acc.dm.school.name,
+        address: acc.dm.school.address ?? null,
+        city: acc.dm.school.city ?? null,
+        postalCode: acc.dm.school.postalCode ?? null,
+        phone: acc.dm.school.phone ?? null,
+        routeName: acc.dm.school.route?.name ?? null,
+        driverName: acc.dm.school.route?.driver ?? null,
+        billingGroupName: acc.dm.school.billingGroups[0]?.billingGroup.name ?? null,
+        menuName: acc.dm.menu.name,
         ageGroups,
         mealCounts,
         items,
@@ -944,7 +989,7 @@ export async function getDeliveryTickets(deliveryDate: Date): Promise<DeliveryTi
 export type KidCountMealRow = {
   mealId: number;
   mealName: string;
-  counts: Record<number, number>; // ageGroupId → count
+  counts: Record<number, number>;
   total: number;
 };
 
@@ -964,20 +1009,27 @@ export type DailyKidCountReport = {
 };
 
 export async function getDailyKidCountReport(deliveryDate: Date): Promise<DailyKidCountReport> {
-  const [ageGroups, meals, kidCounts] = await Promise.all([
+  const [ageGroups, meals, deliveryMenus] = await Promise.all([
     prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
     prisma.meal.findMany({ orderBy: { id: "asc" } }),
-    prisma.kidCount.findMany({
-      where: { date: deliveryDate, count: { gt: 0 } },
-      include: { schoolMenu: { include: { menu: true } } },
-    }),
+    getDeliverySchoolMenus(deliveryDate),
   ]);
 
-  // menu → meal → ageGroup → count
+  const schoolMenuIds = deliveryMenus.map((dm) => dm.id);
+  const smMap = new Map(deliveryMenus.map((dm) => [dm.id, dm]));
+
+  const kidCounts = await prisma.kidCount.findMany({
+    where: {
+      schoolMenuId: schoolMenuIds.length > 0 ? { in: schoolMenuIds } : { in: [-1] },
+      count: { gt: 0 },
+    },
+  });
+
   const menuMap = new Map<number, { menuName: string; meals: Map<number, Map<number, number>> }>();
 
   for (const kc of kidCounts) {
-    const menu = kc.schoolMenu.menu;
+    const dm = smMap.get(kc.schoolMenuId)!;
+    const menu = dm.menu;
     let menuAcc = menuMap.get(menu.id);
     if (!menuAcc) {
       menuAcc = { menuName: menu.name, meals: new Map() };
@@ -1031,7 +1083,7 @@ export async function getDailyKidCountReport(deliveryDate: Date): Promise<DailyK
 
 export type SummarySchoolRow = {
   schoolName: string;
-  quantities: Record<number, number>; // foodItemId → total amount
+  quantities: Record<number, number>;
 };
 
 export type SummaryRouteGroup = {
@@ -1051,27 +1103,15 @@ export type ProductionSummarySection = {
 export async function getProductionSummary(deliveryDate: Date): Promise<ProductionSummarySection[]> {
   const date = deliveryDate;
   const dayId = getDayId(date);
+  const deliveryMenus = await getDeliverySchoolMenus(date);
+  if (deliveryMenus.length === 0) return [];
 
-  const closedIds = (
-    await prisma.schoolClosing.findMany({
-      where: { startDate: { lte: date }, endDate: { gte: date } },
-      select: { schoolId: true },
-    })
-  ).map((c) => c.schoolId);
-
+  const schoolMenuIds = deliveryMenus.map((dm) => dm.id);
   const kidCounts = await prisma.kidCount.findMany({
-    where: {
-      date,
-      schoolId: { notIn: closedIds.length > 0 ? closedIds : [-1] },
-      count: { gt: 0 },
-    },
-    include: {
-      school: { include: { route: true } },
-      schoolMenu: { include: { menu: true } },
-    },
+    where: { schoolMenuId: { in: schoolMenuIds }, count: { gt: 0 } },
   });
 
-  if (kidCounts.length === 0) return [];
+  const smMap = new Map(deliveryMenus.map((dm) => [dm.id, dm]));
 
   type RouteSchoolAcc = { schoolName: string; quantities: Map<number, number> };
   type RouteAcc = { routeName: string; schools: Map<number, RouteSchoolAcc> };
@@ -1084,7 +1124,8 @@ export async function getProductionSummary(deliveryDate: Date): Promise<Producti
   const menuMap = new Map<number, MenuAcc>();
 
   for (const kc of kidCounts) {
-    const menu = kc.schoolMenu.menu;
+    const dm = smMap.get(kc.schoolMenuId)!;
+    const menu = dm.menu;
     const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
 
     let menuAcc = menuMap.get(menu.id);
@@ -1093,8 +1134,8 @@ export async function getProductionSummary(deliveryDate: Date): Promise<Producti
       menuMap.set(menu.id, menuAcc);
     }
 
-    const routeId = kc.school.routeId;
-    const routeName = kc.school.route?.name ?? "No Route";
+    const routeId = dm.school.routeId;
+    const routeName = dm.school.route?.name ?? "No Route";
 
     let routeGroup = menuAcc.routes.get(routeId);
     if (!routeGroup) {
@@ -1104,7 +1145,7 @@ export async function getProductionSummary(deliveryDate: Date): Promise<Producti
 
     let schoolAcc = routeGroup.schools.get(kc.schoolId);
     if (!schoolAcc) {
-      schoolAcc = { schoolName: kc.school.name, quantities: new Map() };
+      schoolAcc = { schoolName: dm.school.name, quantities: new Map() };
       routeGroup.schools.set(kc.schoolId, schoolAcc);
     }
 

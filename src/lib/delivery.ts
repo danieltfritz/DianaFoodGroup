@@ -34,7 +34,7 @@ export type DeliverySchool = {
 export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchool[]> {
   const dayId = getDayId(deliveryDate);
 
-  const [allSchools, kidCounts, closings] = await Promise.all([
+  const [allSchools, closings] = await Promise.all([
     prisma.school.findMany({
       where: { active: true },
       include: {
@@ -51,10 +51,6 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
       },
       orderBy: [{ route: { name: "asc" } }, { name: "asc" }],
     }),
-    prisma.kidCount.findMany({
-      where: { date: deliveryDate, count: { gt: 0 } },
-      include: { meal: true, ageGroup: true },
-    }),
     prisma.schoolClosing.findMany({
       where: { startDate: { lte: deliveryDate }, endDate: { gte: deliveryDate } },
     }),
@@ -65,6 +61,15 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
     (s) => s.schoolMenus.length > 0 && schoolDeliversOn(s, deliveryDate)
   );
 
+  const activeSchoolMenuIds = activeSchools.map((s) => s.schoolMenus[0].id);
+  const kidCounts = await prisma.kidCount.findMany({
+    where: {
+      schoolMenuId: activeSchoolMenuIds.length > 0 ? { in: activeSchoolMenuIds } : { in: [-1] },
+      count: { gt: 0 },
+    },
+    include: { meal: true, ageGroup: true },
+  });
+
   const results: DeliverySchool[] = [];
 
   for (const school of activeSchools) {
@@ -72,7 +77,7 @@ export async function getDeliveryData(deliveryDate: Date): Promise<DeliverySchoo
     const menu = schoolMenu.menu;
     const cycleWeek = getCycleWeek(deliveryDate, menu.effectiveDate, menu.cycleWeeks);
 
-    const schoolKidCounts = kidCounts.filter((kc) => kc.schoolId === school.id);
+    const schoolKidCounts = kidCounts.filter((kc) => kc.schoolMenuId === schoolMenu.id);
     const totalKids = schoolKidCounts.reduce((s, kc) => s + kc.count, 0);
 
     const menuItems = await prisma.menuItem.findMany({

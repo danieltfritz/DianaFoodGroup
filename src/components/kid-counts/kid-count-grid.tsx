@@ -1,39 +1,62 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
-import { upsertKidCount, upsertMilkCount } from "@/lib/actions/kid-counts";
+import { upsertKidCount, createMenuOverride, deleteMenuOverride } from "@/lib/actions/kid-counts";
 
 type AgeGroup = { id: number; name: string };
 type Meal = { id: number; name: string };
-type MilkType = { id: number; name: string; labelColor: string };
 type SchoolRow = {
   schoolId: number;
   schoolName: string;
   schoolMenuId: number;
+  menuName: string;
   isClosed: boolean;
-  counts: Record<string, number>;     // `${mealId}-${ageGroupId}`
-  milkCounts: Record<string, number>; // `${mealId}-${milkTypeId}`
+  startDate: Date;
+  endDate: Date | null;
+  counts: Record<string, number>; // `${mealId}-${ageGroupId}`
 };
 
 interface KidCountGridProps {
-  date: string;
   schools: SchoolRow[];
   meals: Meal[];
   ageGroups: AgeGroup[];
-  milkTypes: MilkType[];
 }
 
-export function KidCountGrid({ date, schools, meals, ageGroups, milkTypes }: KidCountGridProps) {
+
+export function KidCountGrid({ schools, meals, ageGroups }: KidCountGridProps) {
+  const router = useRouter();
   const [selectedSchoolId, setSelectedSchoolId] = useState<string>("all");
+  const [selectedMenuId, setSelectedMenuId] = useState<string>("all");
   const [selectedMealId, setSelectedMealId] = useState<string>("all");
 
-  const displayedSchools = selectedSchoolId === "all"
-    ? schools
-    : schools.filter((s) => String(s.schoolId) === selectedSchoolId);
+  // Override state
+  const [overrideStart, setOverrideStart] = useState<string>("");
+  const [overrideEnd, setOverrideEnd] = useState<string>("");
+  const [overrideError, setOverrideError] = useState<string>("");
+  const [overriding, startOverrideTransition] = useTransition();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, startDeleteTransition] = useTransition();
+
+  const menuOptions = selectedSchoolId === "all"
+    ? []
+    : schools
+        .filter((s) => String(s.schoolId) === selectedSchoolId)
+        .map((s) => ({
+          value: String(s.schoolMenuId),
+          label: s.endDate
+            ? `${s.menuName} ${s.startDate.toLocaleDateString()} – ${s.endDate.toLocaleDateString()}`
+            : s.menuName,
+        }));
+
+  const displayedSchools = schools
+    .filter((s) => selectedSchoolId === "all" || String(s.schoolId) === selectedSchoolId)
+    .filter((s) => selectedMenuId === "all" || String(s.schoolMenuId) === selectedMenuId);
 
   const displayedMeals = selectedMealId === "all"
     ? meals
@@ -43,17 +66,7 @@ export function KidCountGrid({ date, schools, meals, ageGroups, milkTypes }: Kid
     const init: Record<string, number> = {};
     schools.forEach((s) => {
       Object.entries(s.counts).forEach(([key, count]) => {
-        init[`${s.schoolId}-${key}`] = count;
-      });
-    });
-    return init;
-  });
-
-  const [milkValues, setMilkValues] = useState<Record<string, number>>(() => {
-    const init: Record<string, number> = {};
-    schools.forEach((s) => {
-      Object.entries(s.milkCounts).forEach(([key, count]) => {
-        init[`${s.schoolId}-${key}`] = count;
+        init[`${s.schoolMenuId}-${key}`] = count;
       });
     });
     return init;
@@ -62,23 +75,18 @@ export function KidCountGrid({ date, schools, meals, ageGroups, milkTypes }: Kid
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [, startTransition] = useTransition();
 
-  function cellKey(schoolId: number, mealId: number, ageGroupId: number) {
-    return `${schoolId}-${mealId}-${ageGroupId}`;
-  }
-
-  function milkKey(schoolId: number, mealId: number, milkTypeId: number) {
-    return `${schoolId}-${mealId}-${milkTypeId}`;
+  function cellKey(schoolMenuId: number, mealId: number, ageGroupId: number) {
+    return `${schoolMenuId}-${mealId}-${ageGroupId}`;
   }
 
   function handleBlur(school: SchoolRow, mealId: number, ageGroupId: number) {
-    const key = cellKey(school.schoolId, mealId, ageGroupId);
+    const key = cellKey(school.schoolMenuId, mealId, ageGroupId);
     const count = values[key] ?? 0;
     setSaving((s) => ({ ...s, [key]: true }));
     startTransition(async () => {
       await upsertKidCount({
         schoolId: school.schoolId,
         schoolMenuId: school.schoolMenuId,
-        date: new Date(date),
         mealId,
         ageGroupId,
         count,
@@ -87,19 +95,52 @@ export function KidCountGrid({ date, schools, meals, ageGroups, milkTypes }: Kid
     });
   }
 
-  function handleMilkBlur(school: SchoolRow, mealId: number, milkTypeId: number) {
-    const key = milkKey(school.schoolId, mealId, milkTypeId);
-    const count = milkValues[key] ?? 0;
-    setSaving((s) => ({ ...s, [key]: true }));
-    startTransition(async () => {
-      await upsertMilkCount({
-        schoolId: school.schoolId,
-        date: new Date(date),
-        mealId,
-        milkTypeId,
-        count,
-      });
-      setSaving((s) => ({ ...s, [key]: false }));
+  function handleDelete() {
+    const school = displayedSchools[0];
+    if (!school) return;
+    startDeleteTransition(async () => {
+      try {
+        await deleteMenuOverride(school.schoolMenuId);
+        setConfirmDelete(false);
+        setSelectedMenuId("all");
+        router.refresh();
+      } catch (err) {
+        setOverrideError(err instanceof Error ? err.message : "Delete failed.");
+        setConfirmDelete(false);
+      }
+    });
+  }
+
+  function handleOverride() {
+    setOverrideError("");
+    if (!overrideStart || !overrideEnd) {
+      setOverrideError("Both start and end dates are required.");
+      return;
+    }
+    if (new Date(overrideStart) >= new Date(overrideEnd)) {
+      setOverrideError("Start date must be before end date.");
+      return;
+    }
+    const school = displayedSchools[0];
+    if (!school) {
+      setOverrideError("No menu selected.");
+      return;
+    }
+    startOverrideTransition(async () => {
+      try {
+        await createMenuOverride({
+          schoolId: school.schoolId,
+          sourceSchoolMenuId: school.schoolMenuId,
+          startDate: new Date(`${overrideStart}T12:00:00`),
+          endDate: new Date(`${overrideEnd}T12:00:00`),
+        });
+        setOverrideStart("");
+        setOverrideEnd("");
+        setSelectedMenuId("all");
+        router.refresh();
+      } catch (err) {
+        setOverrideError(err instanceof Error ? err.message : "Override failed.");
+      }
     });
   }
 
@@ -112,21 +153,45 @@ export function KidCountGrid({ date, schools, meals, ageGroups, milkTypes }: Kid
   }
 
   const cols = displayedMeals.flatMap((m) => ageGroups.map((a) => ({ meal: m, ageGroup: a })));
+  const showOverridePanel = selectedSchoolId !== "all" && selectedMenuId !== "all";
+  const selectedMenu = displayedSchools[0] ?? null;
+  const isOverride = selectedMenu?.endDate != null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
         <label className="text-sm font-medium">School</label>
         <Combobox
           className="w-64"
           value={selectedSchoolId}
-          onValueChange={(v) => setSelectedSchoolId(v || "all")}
+          onValueChange={(v) => {
+            setSelectedSchoolId(v || "all");
+            setSelectedMenuId("all");
+          }}
           options={[
             { value: "all", label: "All Schools" },
-            ...schools.map((s) => ({ value: String(s.schoolId), label: s.schoolName })),
+            ...Array.from(new Map(schools.map((s) => [s.schoolId, s])).values())
+              .map((s) => ({ value: String(s.schoolId), label: s.schoolName })),
           ]}
           placeholder="All Schools"
         />
+
+        {menuOptions.length > 0 && (
+          <>
+            <label className="text-sm font-medium ml-4">Menu</label>
+            <Combobox
+              className="w-52"
+              value={selectedMenuId}
+              onValueChange={(v) => setSelectedMenuId(v || "all")}
+              options={[
+                { value: "all", label: "All Menus" },
+                ...menuOptions,
+              ]}
+              placeholder="All Menus"
+            />
+          </>
+        )}
+
         <label className="text-sm font-medium ml-4">Meal</label>
         <Combobox
           className="w-44"
@@ -139,6 +204,53 @@ export function KidCountGrid({ date, schools, meals, ageGroups, milkTypes }: Kid
           placeholder="All Meals"
         />
       </div>
+
+      {showOverridePanel && (
+        <div className="flex items-center gap-3 flex-wrap rounded-md border bg-muted/30 px-4 py-3">
+          {isOverride ? (
+            <>
+              <span className="text-sm font-medium text-destructive">Delete this override?</span>
+              {confirmDelete ? (
+                <>
+                  <Button size="sm" variant="destructive" onClick={handleDelete} disabled={deleting}>
+                    {deleting ? "Deleting…" : "Confirm Delete"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button size="sm" variant="destructive" onClick={() => setConfirmDelete(true)}>
+                  Delete Override
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="text-sm font-medium">Override date range:</span>
+              <Input
+                type="date"
+                className="w-40 h-8 text-sm"
+                value={overrideStart}
+                onChange={(e) => setOverrideStart(e.target.value)}
+              />
+              <span className="text-sm text-muted-foreground">to</span>
+              <Input
+                type="date"
+                className="w-40 h-8 text-sm"
+                value={overrideEnd}
+                onChange={(e) => setOverrideEnd(e.target.value)}
+              />
+              <Button size="sm" onClick={handleOverride} disabled={overriding}>
+                {overriding ? "Creating…" : "Override"}
+              </Button>
+            </>
+          )}
+          {overrideError && (
+            <span className="text-sm text-destructive">{overrideError}</span>
+          )}
+        </div>
+      )}
 
       {/* Kid Count Grid */}
       <div className="overflow-x-auto rounded-md border">
@@ -166,19 +278,33 @@ export function KidCountGrid({ date, schools, meals, ageGroups, milkTypes }: Kid
           <TableBody>
             {displayedSchools.map((school) => {
               const total = cols.reduce((sum, { meal, ageGroup }) => {
-                return sum + (values[cellKey(school.schoolId, meal.id, ageGroup.id)] ?? 0);
+                return sum + (values[cellKey(school.schoolMenuId, meal.id, ageGroup.id)] ?? 0);
               }, 0);
 
               return (
-                <TableRow key={school.schoolId} className={school.isClosed ? "opacity-40" : ""}>
+                <TableRow key={school.schoolMenuId} className={school.isClosed ? "opacity-40" : ""}>
                   <TableCell className="sticky left-0 bg-background z-10 font-medium">
                     <div className="flex items-center gap-2">
-                      {school.schoolName}
+                      <div
+                        className="cursor-pointer hover:underline"
+                        onClick={() => {
+                          setSelectedSchoolId(String(school.schoolId));
+                          setSelectedMenuId(String(school.schoolMenuId));
+                        }}
+                      >
+                        <div>{school.schoolName}</div>
+                        <div className="text-xs text-muted-foreground font-normal">
+                          {school.menuName}
+                          {school.endDate && (
+                            <span> {school.startDate.toLocaleDateString()} – {school.endDate.toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      </div>
                       {school.isClosed && <Badge variant="secondary" className="text-xs">Closed</Badge>}
                     </div>
                   </TableCell>
                   {cols.map(({ meal, ageGroup }) => {
-                    const key = cellKey(school.schoolId, meal.id, ageGroup.id);
+                    const key = cellKey(school.schoolMenuId, meal.id, ageGroup.id);
                     return (
                       <TableCell key={key} className="p-1 text-center">
                         {school.isClosed ? (
@@ -203,116 +329,6 @@ export function KidCountGrid({ date, schools, meals, ageGroups, milkTypes }: Kid
           </TableBody>
         </Table>
       </div>
-
-      {/* Milk Count Grid */}
-      <div>
-        <h2 className="text-lg font-semibold mb-2">Milk Counts</h2>
-        <p className="text-xs text-muted-foreground mb-3">
-          Enter milk counts per meal. Total milk should equal total kids per meal.
-        </p>
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="sticky left-0 bg-background z-10 min-w-48">School</TableHead>
-                {displayedMeals.map((m) => (
-                  <TableHead key={m.id} colSpan={milkTypes.length} className="text-center border-l">
-                    {m.name}
-                  </TableHead>
-                ))}
-              </TableRow>
-              <TableRow>
-                <TableHead className="sticky left-0 bg-background z-10" />
-                {displayedMeals.flatMap((m) =>
-                  milkTypes.map((mt) => (
-                    <TableHead key={`${m.id}-${mt.id}`} className="text-center text-xs font-normal min-w-16">
-                      {mt.name}
-                    </TableHead>
-                  ))
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {displayedSchools.map((school) => {
-                if (school.isClosed) return null;
-
-                return (
-                  <TableRow key={school.schoolId}>
-                    <TableCell className="sticky left-0 bg-background z-10 font-medium">
-                      <MilkValidationCell
-                        school={school}
-                        meals={displayedMeals}
-                        ageGroups={ageGroups}
-                        milkTypes={milkTypes}
-                        values={values}
-                        milkValues={milkValues}
-                      />
-                    </TableCell>
-                    {displayedMeals.flatMap((m) =>
-                      milkTypes.map((mt) => {
-                        const key = milkKey(school.schoolId, m.id, mt.id);
-                        return (
-                          <TableCell key={key} className="p-1 text-center">
-                            <Input
-                              type="number"
-                              min={0}
-                              className={`h-7 w-14 text-center text-sm mx-auto ${saving[key] ? "opacity-50" : ""}`}
-                              value={milkValues[key] ?? 0}
-                              onChange={(e) => setMilkValues((v) => ({ ...v, [key]: Number(e.target.value) }))}
-                              onBlur={() => handleMilkBlur(school, m.id, mt.id)}
-                            />
-                          </TableCell>
-                        );
-                      })
-                    )}
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MilkValidationCell({
-  school,
-  meals,
-  ageGroups,
-  milkTypes,
-  values,
-  milkValues,
-}: {
-  school: SchoolRow;
-  meals: Meal[];
-  ageGroups: AgeGroup[];
-  milkTypes: MilkType[];
-  values: Record<string, number>;
-  milkValues: Record<string, number>;
-}) {
-  const warnings: string[] = [];
-
-  for (const m of meals) {
-    const kidTotal = ageGroups.reduce((sum, ag) => {
-      return sum + (values[`${school.schoolId}-${m.id}-${ag.id}`] ?? 0);
-    }, 0);
-    const milkTotal = milkTypes.reduce((sum, mt) => {
-      return sum + (milkValues[`${school.schoolId}-${m.id}-${mt.id}`] ?? 0);
-    }, 0);
-    if (kidTotal > 0 && milkTotal !== kidTotal) {
-      warnings.push(`${m.name}: ${milkTotal}/${kidTotal}`);
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <span>{school.schoolName}</span>
-      {warnings.length > 0 && (
-        <Badge variant="destructive" className="text-xs" title={warnings.join(", ")}>
-          ⚠ {warnings.join(", ")}
-        </Badge>
-      )}
     </div>
   );
 }

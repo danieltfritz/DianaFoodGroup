@@ -68,7 +68,6 @@ export async function calculatePaperProduction(
     prisma.kidCount.findMany({
       where: {
         schoolId: { in: schoolIds },
-        date: { gte: startDate, lte: endDate },
         count: { gt: 0 },
       },
     }),
@@ -113,10 +112,8 @@ export async function calculatePaperProduction(
       const cycleWeek = getCycleWeek(date, menu.effectiveDate, menu.cycleWeeks);
       const dayId = getDayId(date);
 
-      // Kid counts for this school × date
-      const dayKidCounts = allKidCounts.filter(
-        (kc) => kc.schoolId === school.id && kc.date.toISOString().split("T")[0] === dateStr
-      );
+      // Kid counts for this school's active menu (static per menu, not per date)
+      const dayKidCounts = allKidCounts.filter((kc) => kc.schoolMenuId === schoolMenu.id);
       if (dayKidCounts.length === 0) continue;
 
       // Preload menu items for this day

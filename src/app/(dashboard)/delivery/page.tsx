@@ -33,7 +33,7 @@ export default async function DeliveryPage({ searchParams }: { searchParams: Pro
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Delivery</h1>
         <div className="flex items-center gap-2">
-          <DateNav date={dateStr} />
+          <DateNav date={dateStr} basePath="/delivery" />
           <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/delivery/labels?date=${dateStr}${routeFilter ? `&route=${routeFilter}` : ""}`} />}>
             <Tag className="mr-2 size-4" />Labels
           </Button>

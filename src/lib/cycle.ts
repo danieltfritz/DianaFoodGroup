@@ -1,12 +1,12 @@
-/** Parse a YYYY-MM-DD string as local midnight (avoids UTC-offset day shift). */
+/** Parse a YYYY-MM-DD string as UTC midnight — consistent with how Prisma returns @db.Date values. */
 export function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  return new Date(Date.UTC(y, m - 1, d));
 }
 
 export function addDays(date: Date, days: number): Date {
   const d = new Date(date);
-  d.setDate(d.getDate() + days);
+  d.setUTCDate(d.getUTCDate() + days);
   return d;
 }
 
@@ -15,7 +15,7 @@ export function subDays(date: Date, days: number): Date {
 }
 
 export function isThursday(date: Date): boolean {
-  return date.getDay() === 4;
+  return date.getUTCDay() === 4;
 }
 
 /**
@@ -32,7 +32,7 @@ export function getBatch(mealName: string, delaySnack: boolean): "LSD" | "TomB" 
 
 /**
  * Returns the 1-based cycle week for a given date, given the menu's effective date and cycle length.
- * Weeks are counted from the Monday of the effectiveDate's week.
+ * Uses UTC day arithmetic to stay timezone-independent.
  */
 export function getCycleWeek(date: Date, effectiveDate: Date, cycleWeeks: number): number {
   const msPerDay = 1000 * 60 * 60 * 24;
@@ -43,14 +43,16 @@ export function getCycleWeek(date: Date, effectiveDate: Date, cycleWeeks: number
 
 /**
  * Returns the 1-based day ID where 1=Monday ... 5=Friday, 6=Saturday, 7=Sunday.
+ * Uses getUTCDay() so Prisma @db.Date values (always UTC midnight) resolve correctly.
  */
 export function getDayId(date: Date): number {
-  const day = date.getDay(); // 0=Sun
+  const day = date.getUTCDay(); // 0=Sun
   return day === 0 ? 7 : day;
 }
 
 /**
  * Returns true if the school delivers on the given date's weekday.
+ * Uses getUTCDay() so Prisma @db.Date values resolve correctly regardless of server timezone.
  */
 export function schoolDeliversOn(
   school: {
@@ -60,5 +62,5 @@ export function schoolDeliversOn(
   date: Date
 ): boolean {
   const keys = ["deliverySun", "deliveryMon", "deliveryTue", "deliveryWed", "deliveryThu", "deliveryFri", "deliverySat"];
-  return school[keys[date.getDay()] as keyof typeof school] as boolean;
+  return school[keys[date.getUTCDay()] as keyof typeof school] as boolean;
 }

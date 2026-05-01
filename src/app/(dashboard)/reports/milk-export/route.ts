@@ -17,28 +17,28 @@ function buildMilkSheet(
     : routes.filter((r) => r.routeId === routeFilter);
 
   ws.getColumn(1).width = 36;
-  for (let i = 0; i < columns.length; i++) ws.getColumn(2 + i).width = 14;
+  for (let i = 0; i < columns.length; i++) ws.getColumn(2 + i).width = 18;
   ws.getColumn(2 + columns.length).width = 10;
 
   let r = 1;
 
   const writeHeader = (row: number) => {
-    const nameRow = ws.getRow(row);
-    nameRow.getCell(1).value = "School";
+    const ageRow = ws.getRow(row);
+    ageRow.getCell(1).value = "School";
     columns.forEach((col: MilkCountColumn, i: number) => {
-      nameRow.getCell(2 + i).value = col.name;
+      ageRow.getCell(2 + i).value = col.ageGroupName;
     });
-    nameRow.getCell(2 + columns.length).value = "Total";
-    nameRow.eachCell((cell) => { cell.font = bold; cell.fill = headerFill; });
-    nameRow.commit();
+    ageRow.getCell(2 + columns.length).value = "Total";
+    ageRow.eachCell((cell) => { cell.font = bold; cell.fill = headerFill; });
+    ageRow.commit();
 
-    const colorRow = ws.getRow(row + 1);
-    colorRow.getCell(1).value = "";
+    const milkRow = ws.getRow(row + 1);
+    milkRow.getCell(1).value = "";
     columns.forEach((col: MilkCountColumn, i: number) => {
-      colorRow.getCell(2 + i).value = col.labelColor;
+      milkRow.getCell(2 + i).value = col.name;
     });
-    colorRow.eachCell((cell) => { cell.fill = headerFill; });
-    colorRow.commit();
+    milkRow.eachCell((cell) => { cell.fill = headerFill; });
+    milkRow.commit();
 
     return row + 2;
   };
@@ -51,7 +51,7 @@ function buildMilkSheet(
       const dataRow = ws.getRow(r++);
       dataRow.getCell(1).value = school.schoolName;
       columns.forEach((col: MilkCountColumn, i: number) => {
-        dataRow.getCell(2 + i).value = school.counts[col.milkTypeId] || null;
+        dataRow.getCell(2 + i).value = school.counts[col.key] || null;
       });
       dataRow.getCell(2 + columns.length).value = schoolTotal || null;
       dataRow.commit();
@@ -61,7 +61,7 @@ function buildMilkSheet(
     const totalsRow = ws.getRow(r++);
     totalsRow.getCell(1).value = `Route: ${route.routeName}`;
     columns.forEach((col: MilkCountColumn, i: number) => {
-      totalsRow.getCell(2 + i).value = route.totals[col.milkTypeId] || null;
+      totalsRow.getCell(2 + i).value = route.totals[col.key] || null;
     });
     totalsRow.getCell(2 + columns.length).value = routeTotal || null;
     totalsRow.font = bold;
@@ -76,7 +76,7 @@ function buildMilkSheet(
     const grandRow = ws.getRow(r++);
     grandRow.getCell(1).value = "Totals:";
     columns.forEach((col: MilkCountColumn, i: number) => {
-      grandRow.getCell(2 + i).value = grandTotals[col.milkTypeId] || null;
+      grandRow.getCell(2 + i).value = grandTotals[col.key] || null;
     });
     grandRow.getCell(2 + columns.length).value = grandTotal || null;
     grandRow.font = bold;

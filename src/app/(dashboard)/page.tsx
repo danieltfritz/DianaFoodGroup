@@ -38,7 +38,7 @@ export default async function DashboardPage() {
 
   const { dates: upcomingDates, label: upcomingLabel } = getUpcomingDeliveryDates(today);
 
-  const [allSchools, meals, upcomingKidCounts, upcomingMilkCounts, foodItemCount, menuCount, lastBillingRun, closings] =
+  const [allSchools, meals, foodItemCount, menuCount, lastBillingRun, closings] =
     await Promise.all([
       prisma.school.findMany({
         where: { active: true },
@@ -54,8 +54,6 @@ export default async function DashboardPage() {
         },
       }),
       prisma.meal.findMany({ orderBy: { id: "asc" } }),
-      prisma.kidCount.findMany({ where: { date: { in: upcomingDates } } }),
-      prisma.milkCount.findMany({ where: { date: { in: upcomingDates } } }),
       prisma.foodItem.count(),
       prisma.menu.count(),
       prisma.billingRun.findFirst({ orderBy: { deliveryDate: "desc" } }),
@@ -67,36 +65,35 @@ export default async function DashboardPage() {
   const closedIds = new Set(closings.map((c) => c.schoolId));
 
   // Schools delivering on any of the upcoming dates
-  const deliveringSchoolIds = new Set(
-    upcomingDates.flatMap((date) =>
-      allSchools
-        .filter((s) => s.schoolMenus.length > 0 && schoolDeliversOn(s, date) && !closedIds.has(s.id))
-        .map((s) => s.id)
-    )
+  const deliveringSchools = allSchools.filter(
+    (s) =>
+      s.schoolMenus.length > 0 &&
+      !closedIds.has(s.id) &&
+      upcomingDates.some((d) => schoolDeliversOn(s, d))
   );
-  const deliveringSchools = allSchools.filter((s) => deliveringSchoolIds.has(s.id));
+  const deliveringSchoolMenuIds = deliveringSchools.map((s) => s.schoolMenus[0].id);
 
-  // Kid count slots = delivering schools × meals × dates (deduplicated by school-meal across dates)
-  const expectedKidSlots = deliveringSchools.length * meals.length * upcomingDates.length;
+  // Kid/milk counts are static per school menu — query once
+  const [upcomingKidCounts, upcomingMilkCounts] = await Promise.all([
+    deliveringSchoolMenuIds.length > 0
+      ? prisma.kidCount.findMany({ where: { schoolMenuId: { in: deliveringSchoolMenuIds } } })
+      : Promise.resolve([]),
+    deliveringSchoolMenuIds.length > 0
+      ? prisma.milkCount.findMany({ where: { schoolMenuId: { in: deliveringSchoolMenuIds } } })
+      : Promise.resolve([]),
+  ]);
+
+  const expectedKidSlots = deliveringSchools.length * meals.length;
   const filledKidSlots = new Set(
-    upcomingKidCounts
-      .filter((kc) => deliveringSchoolIds.has(kc.schoolId))
-      .map((kc) => `${kc.schoolId}-${kc.mealId}-${kc.date.toISOString()}`)
+    upcomingKidCounts.filter((kc) => kc.count > 0).map((kc) => `${kc.schoolId}-${kc.mealId}`)
   ).size;
-  const totalKids = upcomingKidCounts
-    .filter((kc) => deliveringSchoolIds.has(kc.schoolId))
-    .reduce((sum, kc) => sum + kc.count, 0);
+  const totalKids = upcomingKidCounts.reduce((sum, kc) => sum + kc.count, 0);
 
-  // Milk count slots = delivering schools × meals × dates
-  const expectedMilkSlots = deliveringSchools.length * meals.length * upcomingDates.length;
+  const expectedMilkSlots = deliveringSchools.length * meals.length;
   const filledMilkSlots = new Set(
-    upcomingMilkCounts
-      .filter((mc) => deliveringSchoolIds.has(mc.schoolId))
-      .map((mc) => `${mc.schoolId}-${mc.mealId}-${mc.date.toISOString()}`)
+    upcomingMilkCounts.filter((mc) => mc.count > 0).map((mc) => `${mc.schoolId}-${mc.mealId}`)
   ).size;
-  const totalMilk = upcomingMilkCounts
-    .filter((mc) => deliveringSchoolIds.has(mc.schoolId))
-    .reduce((sum, mc) => sum + mc.count, 0);
+  const totalMilk = upcomingMilkCounts.reduce((sum, mc) => sum + mc.count, 0);
 
   const todayLabel = today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const dow = today.getDay();

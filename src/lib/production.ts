@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { getCycleWeek, getDayId, addDays, isThursday, getBatch } from "@/lib/cycle";
+import { getCycleWeek, getDayId, addDays, isThursday, getBatch, schoolDeliversOn } from "@/lib/cycle";
 import { packContainers, type PackResult, type ContainerSizeInput } from "@/lib/containers";
 
 export type { PackResult };
@@ -65,26 +65,39 @@ function accToItem(acc: FoodAccumulator): ProductionItem {
 export async function calculateProduction(deliveryDate: Date): Promise<ProductionResult> {
   const dayId = getDayId(deliveryDate);
 
-  const [closedSchoolIds, meals] = await Promise.all([
-    prisma.schoolClosing
-      .findMany({
-        where: { startDate: { lte: deliveryDate }, endDate: { gte: deliveryDate } },
-        select: { schoolId: true },
-      })
-      .then((r) => r.map((c) => c.schoolId)),
-    prisma.meal.findMany({ select: { id: true, name: true } }),
+  const meals = await prisma.meal.findMany({ select: { id: true, name: true } });
+  const mealNameMap = new Map(meals.map((m) => [m.id, m.name]));
+
+  const [schoolMenus, closings] = await Promise.all([
+    prisma.schoolMenu.findMany({
+      where: {
+        startDate: { lte: deliveryDate },
+        OR: [{ endDate: null }, { endDate: { gte: deliveryDate } }],
+      },
+      include: { school: true, menu: true },
+      orderBy: { startDate: "desc" },
+    }),
+    prisma.schoolClosing.findMany({
+      where: { startDate: { lte: deliveryDate }, endDate: { gte: deliveryDate } },
+      select: { schoolId: true },
+    }),
   ]);
 
-  const mealNameMap = new Map(meals.map((m) => [m.id, m.name]));
+  const closedIds = new Set(closings.map((c) => c.schoolId));
+  const activeSchoolMenuIds: number[] = [];
+  const schoolMenuMap = new Map<number, typeof schoolMenus[0]>();
+
+  for (const sm of schoolMenus) {
+    if (closedIds.has(sm.schoolId)) continue;
+    if (!schoolDeliversOn(sm.school, deliveryDate)) continue;
+    activeSchoolMenuIds.push(sm.id);
+    schoolMenuMap.set(sm.id, sm);
+  }
 
   const kidCounts = await prisma.kidCount.findMany({
     where: {
-      date: deliveryDate,
-      schoolId: { notIn: closedSchoolIds.length > 0 ? closedSchoolIds : [-1] },
+      schoolMenuId: activeSchoolMenuIds.length > 0 ? { in: activeSchoolMenuIds } : { in: [-1] },
       count: { gt: 0 },
-    },
-    include: {
-      schoolMenu: { include: { menu: true } },
     },
   });
 
@@ -95,7 +108,8 @@ export async function calculateProduction(deliveryDate: Date): Promise<Productio
   const boxTotals = new Map<number, FoodAccumulator>();
 
   for (const kc of kidCounts) {
-    const menu = kc.schoolMenu.menu;
+    const sm = schoolMenuMap.get(kc.schoolMenuId)!;
+    const menu = sm.menu;
     const cycleWeek = getCycleWeek(deliveryDate, menu.effectiveDate, menu.cycleWeeks);
     const mealName = mealNameMap.get(kc.mealId) ?? "";
     const batch = getBatch(mealName, menu.delaySnack);

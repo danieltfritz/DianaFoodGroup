@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import type ExcelJS from "exceljs";
-import { parseLocalDate } from "@/lib/cycle";
-import { getDeliveryTickets, type DeliveryTicket } from "@/lib/reports";
+import { prisma } from "@/lib/db";
+import type { DeliveryTicket } from "@/lib/reports";
+import { getSnapshotDeliveryTickets } from "@/lib/production-reports";
 import { createWorkbook, addRawSheet, workbookToBuffer, xlsxResponse, SHEET_STYLES } from "@/lib/excel";
 
 const COL_QTY = 1;
@@ -180,7 +181,7 @@ function buildTicketSheet(ws: ExcelJS.Worksheet, ticket: DeliveryTicket, dateStr
     for (const m of milkItems) {
       const milkRow = ws.getRow(r++);
       milkRow.getCell(COL_QTY).value = m.qty;
-      milkRow.getCell(COL_CONTAINER).value = m.milkTypeName;
+      milkRow.getCell(COL_CONTAINER).value = `${m.labelColor} (${m.milkTypeName}) - ${m.containerName}`;
       milkRow.commit();
     }
   }
@@ -192,14 +193,18 @@ export async function GET(request: NextRequest) {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const date = dateParam ? parseLocalDate(dateParam) : today;
-  const dateStr = date.toISOString().split("T")[0];
+  const dateStr = dateParam ?? today.toISOString().split("T")[0];
   const fileDateStr = dateStr.replace(/-/g, "");
-  const displayDate = new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
-    month: "numeric", day: "numeric", year: "numeric",
+  const displayDate = new Date(dateStr + "T00:00:00.000Z").toLocaleDateString("en-US", {
+    timeZone: "UTC", month: "numeric", day: "numeric", year: "numeric",
   });
 
-  const tickets = await getDeliveryTickets(date);
+  const production = await prisma.production.findFirst({
+    where: { productionDate: new Date(dateStr + "T00:00:00.000Z") },
+    select: { id: true },
+  });
+
+  const tickets = production ? await getSnapshotDeliveryTickets(production.id) : [];
 
   const wb = createWorkbook();
 

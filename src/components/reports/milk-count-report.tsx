@@ -1,3 +1,4 @@
+import React from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { MilkCountReportData } from "@/lib/reports";
 
@@ -11,7 +12,6 @@ export function MilkCountReport({ data }: { data: MilkCountReportData }) {
   }
 
   const { columns, routes, grandTotals } = data;
-
   const grandTotal = Object.values(grandTotals).reduce((s, v) => s + v, 0);
 
   return (
@@ -22,9 +22,9 @@ export function MilkCountReport({ data }: { data: MilkCountReportData }) {
             <TableRow>
               <TableHead className="min-w-[180px]">School</TableHead>
               {columns.map((col) => (
-                <TableHead key={col.milkTypeId} className="text-right whitespace-nowrap">
-                  <div>{col.name}</div>
-                  <div className="text-muted-foreground font-normal text-xs">{col.labelColor}</div>
+                <TableHead key={col.key} className="text-right whitespace-nowrap">
+                  <div>{col.ageGroupName}</div>
+                  <div className="text-muted-foreground font-normal text-xs">{col.name}</div>
                 </TableHead>
               ))}
               <TableHead className="text-right">Total</TableHead>
@@ -34,8 +34,8 @@ export function MilkCountReport({ data }: { data: MilkCountReportData }) {
             {routes.map((route) => {
               const routeTotal = Object.values(route.totals).reduce((s, v) => s + v, 0);
               return (
-                <>
-                  <TableRow key={`route-${route.routeId}-header`} className="bg-muted/50">
+                <React.Fragment key={`route-${route.routeId}`}>
+                  <TableRow className="bg-muted/50">
                     <TableCell colSpan={columns.length + 2} className="text-xs font-semibold text-muted-foreground py-1.5 px-4">
                       Route: {route.routeName}
                     </TableCell>
@@ -46,8 +46,8 @@ export function MilkCountReport({ data }: { data: MilkCountReportData }) {
                       <TableRow key={school.schoolId}>
                         <TableCell className="pl-6">{school.schoolName}</TableCell>
                         {columns.map((col) => (
-                          <TableCell key={col.milkTypeId} className="text-right">
-                            {school.counts[col.milkTypeId] ?? ""}
+                          <TableCell key={col.key} className="text-right">
+                            {school.counts[col.key] ?? ""}
                           </TableCell>
                         ))}
                         <TableCell className="text-right font-medium">{schoolTotal || ""}</TableCell>
@@ -57,20 +57,20 @@ export function MilkCountReport({ data }: { data: MilkCountReportData }) {
                   <TableRow key={`route-${route.routeId}-totals`} className="font-semibold border-t">
                     <TableCell className="pl-4">Route {route.routeName} Total</TableCell>
                     {columns.map((col) => (
-                      <TableCell key={col.milkTypeId} className="text-right">
-                        {route.totals[col.milkTypeId] || ""}
+                      <TableCell key={col.key} className="text-right">
+                        {route.totals[col.key] || ""}
                       </TableCell>
                     ))}
                     <TableCell className="text-right">{routeTotal || ""}</TableCell>
                   </TableRow>
-                </>
+                </React.Fragment>
               );
             })}
             <TableRow className="font-bold border-t-2">
               <TableCell>Totals</TableCell>
               {columns.map((col) => (
-                <TableCell key={col.milkTypeId} className="text-right">
-                  {grandTotals[col.milkTypeId] || ""}
+                <TableCell key={col.key} className="text-right">
+                  {grandTotals[col.key] || ""}
                 </TableCell>
               ))}
               <TableCell className="text-right">{grandTotal || ""}</TableCell>

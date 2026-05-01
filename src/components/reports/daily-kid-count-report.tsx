@@ -1,3 +1,4 @@
+import React from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { DailyKidCountReport } from "@/lib/reports";
 
@@ -27,8 +28,8 @@ export function DailyKidCountReport({ data }: { data: DailyKidCountReport }) {
           </TableHeader>
           <TableBody>
             {sections.map((section) => (
-              <>
-                <TableRow key={`menu-${section.menuId}-header`} className="bg-muted/50">
+              <React.Fragment key={section.menuId}>
+                <TableRow className="bg-muted/50">
                   <TableCell colSpan={ageGroups.length + 2} className="text-xs font-semibold text-muted-foreground py-1.5 px-4">
                     {section.menuName}
                   </TableCell>
@@ -53,7 +54,7 @@ export function DailyKidCountReport({ data }: { data: DailyKidCountReport }) {
                   ))}
                   <TableCell className="text-right">{section.grandTotal || ""}</TableCell>
                 </TableRow>
-              </>
+              </React.Fragment>
             ))}
             <TableRow className="font-bold border-t-2">
               <TableCell>Totals</TableCell>

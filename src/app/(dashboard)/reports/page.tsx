@@ -11,8 +11,19 @@ import { MilkCountReport } from "@/components/reports/milk-count-report";
 import { DailyKidCountReport } from "@/components/reports/daily-kid-count-report";
 import { ItemReport } from "@/components/reports/item-report";
 import { ProductionSummaryReport } from "@/components/reports/production-summary-report";
-import { calculateProduction } from "@/lib/production";
-import { getSchoolSummary, getContainerReport, getMilkReport, getMilkCountReport, getDailyKidCountReport, getItemReport, getProductionSummary } from "@/lib/reports";
+import {
+  getSchoolSummary,
+  getMilkCountReport,
+  getDailyKidCountReport,
+} from "@/lib/reports";
+import {
+  getSnapshotFoodAudit,
+  getSnapshotContainerReport,
+  getSnapshotMilkReport,
+  getSnapshotItemReport,
+  getSnapshotProductionSummary,
+} from "@/lib/production-reports";
+import { prisma } from "@/lib/db";
 
 export default async function ReportsPage({
   searchParams,
@@ -26,24 +37,60 @@ export default async function ReportsPage({
   const dateStr = dateParam ?? today.toISOString().split("T")[0];
   const date = parseLocalDate(dateStr);
 
-  const [productionResult, schoolSummary, containerReport, milkReport, milkCountReport, kidCountReport, itemReport, productionSummary] = await Promise.all([
-    calculateProduction(date),
-    getSchoolSummary(date),
-    getContainerReport(date),
-    getMilkReport(date),
-    getMilkCountReport(date),
-    getDailyKidCountReport(date),
-    getItemReport(date),
-    getProductionSummary(date),
+  // Look up production snapshot by production date — use UTC midnight to avoid
+  // local-timezone drift turning "2026-04-23" into a different UTC date.
+  const production = await prisma.production.findFirst({
+    where: { productionDate: new Date(dateStr + "T00:00:00.000Z") },
+    select: { id: true, productionDate: true, servingDateLSD: true },
+  });
+
+  // Live reports (kid/milk counts) must filter by serving/delivery date, not production date.
+  const liveDate = production ? production.servingDateLSD : date;
+
+  const [schoolSummary, milkCountReport, kidCountReport] = await Promise.all([
+    getSchoolSummary(liveDate),
+    getMilkCountReport(liveDate),
+    getDailyKidCountReport(liveDate),
   ]);
-  const productionItems = productionResult.all;
+
+  const [foodAudit, containerReport, milkReport, itemReport, productionSummary] =
+    production
+      ? await Promise.all([
+          getSnapshotFoodAudit(production.id),
+          getSnapshotContainerReport(production.id),
+          getSnapshotMilkReport(production.id),
+          getSnapshotItemReport(production.id),
+          getSnapshotProductionSummary(production.id),
+        ])
+      : [[], [], [], [], []];
 
   const activeTab = tab ?? "summary";
+
+  const fmtDate = (d: Date) =>
+    new Date(d).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+
+  const noSnapshotBanner = !production && (
+    <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      No production run found for {fmtDate(date)}.{" "}
+      <Link href="/production" className="font-medium underline">
+        Go to Production
+      </Link>{" "}
+      to calculate it first.
+    </div>
+  );
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Reports</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Reports</h1>
+          {production && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Snapshot from production run on{" "}
+              {fmtDate(production.productionDate)}
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/reports/fruit" />}>
             Fruit Report
@@ -66,9 +113,11 @@ export default async function ReportsPage({
           <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/reports/delivery-tickets-export?date=${dateStr}`} />}>
             Export Tickets
           </Button>
-          <DateNav date={dateStr} />
+          <DateNav date={dateStr} basePath="/reports" />
         </div>
       </div>
+
+      {noSnapshotBanner}
 
       <Tabs defaultValue={activeTab}>
         <TabsList className="print:hidden">
@@ -87,7 +136,7 @@ export default async function ReportsPage({
         </TabsContent>
 
         <TabsContent value="food-audit" className="mt-4">
-          <FoodAuditReport items={productionItems} />
+          <FoodAuditReport items={foodAudit} />
         </TabsContent>
 
         <TabsContent value="containers" className="mt-4">

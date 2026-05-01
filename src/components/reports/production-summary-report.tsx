@@ -1,3 +1,4 @@
+import React from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ProductionSummarySection } from "@/lib/reports";
 
@@ -26,9 +27,9 @@ function MenuSection({ section }: { section: ProductionSummarySection }) {
           </TableHeader>
           <TableBody>
             {routes.map((rg) => (
-              <>
+              <React.Fragment key={rg.routeId ?? "no-route"}>
                 {/* Route header row */}
-                <TableRow key={`route-${rg.routeId}`} className="bg-muted/60">
+                <TableRow className="bg-muted/60">
                   <TableCell colSpan={foodItems.length + 1} className="font-semibold text-sm py-1 px-3">
                     {rg.routeName}
                   </TableCell>
@@ -47,7 +48,7 @@ function MenuSection({ section }: { section: ProductionSummarySection }) {
                 ))}
 
                 {/* Route totals row */}
-                <TableRow key={`total-${rg.routeId}`} className="bg-muted/30 font-semibold text-sm">
+                <TableRow className="bg-muted/30 font-semibold text-sm">
                   <TableCell className="pl-6 italic">Route Total</TableCell>
                   {foodItems.map((fi) => (
                     <TableCell key={fi.foodId} className="text-right">
@@ -55,7 +56,7 @@ function MenuSection({ section }: { section: ProductionSummarySection }) {
                     </TableCell>
                   ))}
                 </TableRow>
-              </>
+              </React.Fragment>
             ))}
           </TableBody>
         </Table>

@@ -28,7 +28,7 @@ type FoodItem = {
 type Container = { id: number; name: string };
 type User = { id: string; name: string | null; email: string; role: string; createdAt: Date };
 type AuditEntry = {
-  id: number; schoolName: string; date: Date; mealName: string;
+  id: number; schoolName: string; menuName: string; mealName: string;
   ageGroupName: string; oldCount: number; newCount: number;
   userName: string | null; userEmail: string; changedAt: Date;
 };

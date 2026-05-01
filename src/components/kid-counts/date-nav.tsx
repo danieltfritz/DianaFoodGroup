@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-export function DateNav({ date }: { date: string }) {
+export function DateNav({ date, basePath = "/kid-counts" }: { date: string; basePath?: string }) {
   const router = useRouter();
 
   function go(d: string) {
-    router.push(`/kid-counts?date=${d}`);
+    router.push(`${basePath}?date=${d}`);
   }
 
   function shift(days: number) {

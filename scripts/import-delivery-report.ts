@@ -2,10 +2,9 @@
  * One-time import script: DeliveryReport.csv → KidCount table
  *
  * Usage:
- *   npx tsx scripts/import-delivery-report.ts --date YYYY-MM-DD --file /path/to/DeliveryReport.csv
+ *   npx tsx scripts/import-delivery-report.ts --file /path/to/DeliveryReport.csv
  *
  * Options:
- *   --date   Delivery date (required), e.g. 2026-04-22
  *   --file   Path to DeliveryReport.csv (default: ../Reports/DeliveryReport.csv)
  *   --dry    Dry run: print what would be imported without writing to DB
  */
@@ -36,7 +35,6 @@ function parseArgs() {
     return i !== -1 ? args[i + 1] : undefined;
   };
   return {
-    date: get("--date"),
     file: get("--file") ?? path.join(__dirname, "../../Reports/DeliveryReport.csv"),
     dry: args.includes("--dry"),
   };
@@ -47,22 +45,18 @@ function normalizeName(name: string): string {
 }
 
 async function main() {
-  const { date: dateStr, file, dry } = parseArgs();
+  const { file, dry } = parseArgs();
 
-  if (!dateStr) {
-    console.error("Error: --date YYYY-MM-DD is required");
-    process.exit(1);
-  }
   if (!fs.existsSync(file)) {
     console.error(`Error: file not found: ${file}`);
     process.exit(1);
   }
 
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
+  // Use today's date to find active school menus
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   console.log(`\nDeliveryReport import`);
-  console.log(`  Date : ${dateStr}`);
   console.log(`  File : ${file}`);
   console.log(`  Mode : ${dry ? "DRY RUN (no writes)" : "LIVE"}\n`);
 
@@ -73,10 +67,11 @@ async function main() {
     prisma.ageGroup.findMany({ orderBy: { id: "asc" } }),
     prisma.schoolMenu.findMany({
       where: {
-        startDate: { lte: date },
-        OR: [{ endDate: null }, { endDate: { gte: date } }],
+        startDate: { lte: today },
+        OR: [{ endDate: null }, { endDate: { gte: today } }],
       },
       include: { menu: true },
+      orderBy: { startDate: "desc" },
     }),
   ]);
 
@@ -98,21 +93,27 @@ async function main() {
   const findSchool = (name: string) =>
     schoolByExact.get(name) ?? schoolByNorm.get(normalizeName(name));
 
-  const menusBySchool = new Map<number, typeof schoolMenus>();
+  // Index active school menus: schoolId → latest SchoolMenu
+  const activeMenuBySchool = new Map<number, typeof schoolMenus[0]>();
   for (const sm of schoolMenus) {
-    if (!menusBySchool.has(sm.schoolId)) menusBySchool.set(sm.schoolId, []);
-    menusBySchool.get(sm.schoolId)!.push(sm);
+    if (!activeMenuBySchool.has(sm.schoolId)) {
+      activeMenuBySchool.set(sm.schoolId, sm);
+    }
   }
+
   const findSchoolMenuId = (schoolId: number, menuName: string) => {
-    const list = menusBySchool.get(schoolId) ?? [];
-    return (list.find((sm) => sm.menu.name === menuName) ?? list[0])?.id ?? null;
+    const sm = activeMenuBySchool.get(schoolId);
+    if (!sm) return null;
+    if (sm.menu.name === menuName || !menuName) return sm.id;
+    // fallback: use whatever active menu the school has
+    return sm.id;
   };
 
   // ── Parse CSV ───────────────────────────────────────────────────────────────
   const csvText = fs.readFileSync(file, "utf-8");
   const lines = csvText.trim().split(/\r?\n/).slice(1);
 
-  type Row = { schoolId: number; schoolMenuId: number; date: Date; mealId: number; ageGroupId: number; count: number };
+  type Row = { schoolId: number; schoolMenuId: number; mealId: number; ageGroupId: number; count: number };
   const rowMap = new Map<string, Row>();
   const unmatched: string[] = [];
   const noMenu: string[] = [];
@@ -145,8 +146,8 @@ async function main() {
         const count = parseInt(cols[section.countStart + i] ?? "0", 10) || 0;
         if (count === 0) { zeroSkipped++; continue; }
 
-        const key = `${school.id}-${meal.id}-${ag.id}`;
-        rowMap.set(key, { schoolId: school.id, schoolMenuId, date, mealId: meal.id, ageGroupId: ag.id, count });
+        const key = `${schoolMenuId}-${meal.id}-${ag.id}`;
+        rowMap.set(key, { schoolId: school.id, schoolMenuId, mealId: meal.id, ageGroupId: ag.id, count });
       }
     }
   }
@@ -175,8 +176,12 @@ async function main() {
   // ── Write to DB ─────────────────────────────────────────────────────────────
   console.log(`\nWriting to database…`);
   await prisma.$transaction(async (tx) => {
-    const deleted = await tx.kidCount.deleteMany({ where: { date } });
-    console.log(`  Deleted ${deleted.count} existing records for ${dateStr}`);
+    // Clear all existing kid counts for the affected school menus
+    const affectedMenuIds = [...new Set(rows.map((r) => r.schoolMenuId))];
+    const deleted = await tx.kidCount.deleteMany({
+      where: { schoolMenuId: { in: affectedMenuIds } },
+    });
+    console.log(`  Deleted ${deleted.count} existing records for affected menus`);
     await tx.kidCount.createMany({ data: rows });
     console.log(`  Inserted ${rows.length} records`);
   });

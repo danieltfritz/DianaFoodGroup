@@ -13,6 +13,7 @@ import {
   Settings,
   Home,
   Package,
+  Milk,
 } from "lucide-react";
 import {
   Sidebar,
@@ -30,6 +31,7 @@ import { UserMenu } from "@/components/layout/user-menu";
 const navItems = [
   { title: "Dashboard", href: "/", icon: Home },
   { title: "Kid Counts", href: "/kid-counts", icon: ClipboardList },
+  { title: "Milk Counts", href: "/milk-counts", icon: Milk },
   { title: "Production", href: "/production", icon: Factory },
   { title: "Delivery", href: "/delivery", icon: Truck },
   { title: "Billing", href: "/billing", icon: Receipt },

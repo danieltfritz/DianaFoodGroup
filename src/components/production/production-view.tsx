@@ -161,8 +161,8 @@ function DayPanel({ result }: { result: ProductionResult }) {
 
 export function ProductionView({ days }: { days: ProductionDayData[] }) {
   const fmtDate = (str: string) => {
-    const d = new Date(str + "T00:00:00");
-    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const d = new Date(str + "T00:00:00.000Z");
+    return d.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
   };
 
   if (days.length === 1) {

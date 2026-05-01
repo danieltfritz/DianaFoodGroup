@@ -3,7 +3,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 type AuditEntry = {
   id: number;
   schoolName: string;
-  date: Date;
+  menuName: string;
   mealName: string;
   ageGroupName: string;
   oldCount: number;
@@ -32,7 +32,7 @@ export function AuditLogTab({ entries }: { entries: AuditEntry[] }) {
               <TableHead>When</TableHead>
               <TableHead>User</TableHead>
               <TableHead>School</TableHead>
-              <TableHead>Date</TableHead>
+              <TableHead>Menu</TableHead>
               <TableHead>Meal</TableHead>
               <TableHead>Age Group</TableHead>
               <TableHead className="text-right">Old</TableHead>
@@ -47,7 +47,7 @@ export function AuditLogTab({ entries }: { entries: AuditEntry[] }) {
                 </TableCell>
                 <TableCell className="text-sm">{e.userName ?? e.userEmail}</TableCell>
                 <TableCell className="font-medium">{e.schoolName}</TableCell>
-                <TableCell className="text-sm">{new Date(e.date).toLocaleDateString()}</TableCell>
+                <TableCell className="text-sm">{e.menuName}</TableCell>
                 <TableCell className="text-sm">{e.mealName}</TableCell>
                 <TableCell className="text-sm">{e.ageGroupName}</TableCell>
                 <TableCell className="text-right text-muted-foreground">{e.oldCount}</TableCell>
